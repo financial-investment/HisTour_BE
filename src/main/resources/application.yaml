@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: histour
+  datasource:
+    url: jdbc:mysql://localhost:3306/heritage_trip?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.heritagetrip.domain
+  configuration:
+    map-underscore-to-camel-case: true
+
+jwt:
+  secret: ${JWT_SECRET:heritagetrip-local-dev-secret-key-must-be-256bits-long}
+  access-token-expiry: 3600000
+  refresh-token-expiry: 604800000
+
+heritage:
+  api:
+    base-url: http://www.khs.go.kr/cha
+    location-url: http://www.gis-heritage.go.kr/openapi/xmlService/spca.do
