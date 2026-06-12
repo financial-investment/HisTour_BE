@@ -1,7 +1,10 @@
 package com.histour.batch;
 
 import com.histour.client.HeritageApiClient;
-import com.histour.domain.heritage.*;
+import com.histour.domain.heritage.entity.Heritage;
+import com.histour.domain.heritage.entity.HeritageDescription;
+import com.histour.domain.heritage.entity.HeritageMedia;
+import com.histour.domain.heritage.mapper.HeritageMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;

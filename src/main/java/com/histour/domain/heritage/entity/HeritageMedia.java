@@ -1,4 +1,4 @@
-package com.histour.domain.heritage;
+package com.histour.domain.heritage.entity;
 
 import lombok.Data;
 

@@ -1,5 +1,8 @@
-package com.histour.domain.heritage;
+package com.histour.domain.heritage.mapper;
 
+import com.histour.domain.heritage.entity.Heritage;
+import com.histour.domain.heritage.entity.HeritageDescription;
+import com.histour.domain.heritage.entity.HeritageMedia;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

@@ -1,7 +1,7 @@
 package com.histour.batch;
 
 import com.histour.client.HeritageApiClient;
-import com.histour.domain.heritage.HeritageMapper;
+import com.histour.domain.heritage.mapper.HeritageMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
