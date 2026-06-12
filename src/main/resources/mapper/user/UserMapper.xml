@@ -9,12 +9,14 @@
         email,
         password,
         nickname,
+        preferred_lang,
         created_at
         )
         VALUES (
         #{email},
         #{password},
         #{nickname},
+        #{preferredLang},
         now()
         )
     </insert>
@@ -24,6 +26,7 @@
         id,
         email,
         nickname,
+        preferred_lang AS preferredLang,
         created_at AS createdAt
         FROM users
         WHERE id = #{id}
@@ -51,6 +54,7 @@
         id,
         email,
         nickname,
+        preferred_lang AS preferredLang,
         created_at AS createdAt
         FROM users
         WHERE email = #{email}

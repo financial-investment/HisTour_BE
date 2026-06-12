@@ -9,6 +9,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.NoSuchElementException;
+
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -19,17 +21,18 @@ public class UserService {
     @Transactional
     public void signUp(UserRegistRequest request) {
         if (userMapper.existsByEmail(request.email()) > 0) {
-            throw new RuntimeException("이미 사용 중인 이메일입니다.");
+            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
         }
 
         if (userMapper.existsByNickname(request.nickname()) > 0) {
-            throw new RuntimeException("이미 사용 중인 닉네임입니다.");
+            throw new IllegalArgumentException("이미 사용 중인 닉네임입니다.");
         }
 
         User user = User.builder()
                 .nickname(request.nickname())
                 .email(request.email())
                 .password(passwordEncoder.encode(request.password()))
+                .preferredLang(resolvePreferredLang(request.preferredLang()))
                 .build();
 
         userMapper.save(user);
@@ -39,9 +42,17 @@ public class UserService {
         User user = userMapper.findById(userId);
 
         if (user == null) {
-            throw new RuntimeException("사용자를 찾을 수 없습니다.");
+            throw new NoSuchElementException("사용자를 찾을 수 없습니다.");
         }
 
         return UserResponse.from(user);
+    }
+
+    private String resolvePreferredLang(String preferredLang) {
+        if (preferredLang == null || preferredLang.isBlank()) {
+            return "ko";
+        }
+
+        return preferredLang;
     }
 }
