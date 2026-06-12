@@ -16,7 +16,7 @@ spring:
 
 mybatis:
   mapper-locations: classpath:mapper/**/*.xml
-  type-aliases-package: com.heritagetrip.domain
+  type-aliases-package: com.histour.domain
   configuration:
     map-underscore-to-camel-case: true
 
@@ -27,5 +27,7 @@ jwt:
 
 heritage:
   api:
-    base-url: http://www.khs.go.kr/cha
-    location-url: http://www.gis-heritage.go.kr/openapi/xmlService/spca.do
+    base-url: https://www.khs.go.kr/cha
+    location-url: https://www.gis-heritage.go.kr/openapi/xmlService/spca.do
+  loader:
+    enabled: false
