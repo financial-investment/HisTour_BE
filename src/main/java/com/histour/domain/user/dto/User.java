@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -14,12 +14,10 @@ import java.util.Date;
 public class User {
 
     private Long id;
-    private String username;
+    private String nickname;
     private String email;
     private String password;
-    private String name;
-    private Date createdDate;
-    private Date modifiedDate;
-    private String profile;
+    private LocalDateTime createdAt;
+    private String preferredLang;
 
 }

@@ -1,6 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.histour.domain.user.mapper.UserMapper">
 
+<mapper namespace="com.histour.domain.user.mapper.UserMapper">
+    <insert id="save" parameterType="com.histour.domain.user.dto.User"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO users (
+        email,
+        password,
+        nickname,
+        created_at
+        )
+        VALUES (
+        #{email},
+        #{password},
+        #{nickname},
+        now()
+        )
+    </insert>
+
+    <select id="findById" resultType="com.histour.domain.user.dto.User">
+        SELECT
+        id,
+        email,
+        nickname,
+        created_at AS createdAt
+        FROM users
+        WHERE id = #{id}
+    </select>
+
+
+    <select id="existsByEmail" >
+        SELECT
+        count(*)
+        FROM users
+        WHERE email = #{email}
+    </select>
+
+    <select id="existsByNickname">
+        SELECT
+        count(*)
+        FROM users
+        WHERE nickname = #{nickname}
+    </select>
+
+
+
+    <select id="findByEmail" resultType="com.histour.domain.user.dto.User">
+        SELECT
+        id,
+        email,
+        nickname,
+        created_at AS createdAt
+        FROM users
+        WHERE email = #{email}
+    </select>
 </mapper>
