@@ -149,7 +149,7 @@ public class HeritageDataLoader implements ApplicationRunner {
         log.info("적재: {} (이미지 {}장)", listItem.getCcbaMnm1(), imgCount);
     }
 
-    private String mapPeriod(String raw) {
+    String mapPeriod(String raw) {
         if (raw == null) return "UNKNOWN";
 
         // 1단계: 연도 추출 → 시대 경계값으로 자동 매핑
@@ -170,7 +170,7 @@ public class HeritageDataLoader implements ApplicationRunner {
     }
 
     // 텍스트에서 가장 이른 연도 추출 — (YYYY) 괄호 표기 우선, N세기 표현 보완
-    private Integer extractEarliestYear(String text) {
+    Integer extractEarliestYear(String text) {
         List<Integer> years = new ArrayList<>();
 
         // (YYYY) 형태: 역사적 제작연도의 표준 표기 (예: "을사년(1605)", "고종 34년(1247)")
@@ -191,7 +191,7 @@ public class HeritageDataLoader implements ApplicationRunner {
     }
 
     // 연도 → 시대 경계값 매핑
-    private String periodFromYear(int year) {
+    String periodFromYear(int year) {
         if (year < 668)  return "THREE_KINGDOMS"; // 삼국 (고조선/선사는 키워드로만)
         if (year < 918)  return "UNIFIED";
         if (year < 1392) return "GORYEO";

@@ -100,7 +100,7 @@ public class HeritageApiClient {
         }
     }
 
-    private List<ImageItem> parseImageXml(String xml) {
+    List<ImageItem> parseImageXml(String xml) {
         List<ImageItem> result = new ArrayList<>();
         try {
             // 비표준 한글/특수문자 태그 제거 (API가 가끔 문화재명을 태그로 사용)
