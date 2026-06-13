@@ -1,4 +1,6 @@
 package com.histour.domain.auth.dto;
 
-public record TokenResponse() {
+public record TokenResponse(
+        String accessToken
+) {
 }

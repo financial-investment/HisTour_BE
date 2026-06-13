@@ -1,19 +1,15 @@
 package com.histour.domain.auth.jwt;
 
-import com.histour.domain.user.dto.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
-import java.util.Arrays;
 import java.util.Date;
 
 @Component
-@Slf4j
 public class JwtProvider {
     private final long accessExpMin;
     private final long refreshExpMin;
@@ -25,8 +21,6 @@ public class JwtProvider {
         this.accessExpMin = accessExpMin;
         this.refreshExpMin = refreshExpMin;
         this.key = Keys.hmacShaKeyFor(secretKeyString.getBytes());
-
-        log.debug("jwt key: {}", Arrays.toString(key.getEncoded()));
     }
 
     /**

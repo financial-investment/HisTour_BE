@@ -50,6 +50,7 @@
         SELECT
         id,
         email,
+        password,
         nickname,
         created_at AS createdAt
         FROM users
