@@ -1,6 +1,52 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.histour.domain.heritage.HeritageMapper">
+<mapper namespace="com.histour.domain.heritage.mapper.HeritageMapper">
+
+    <select id="count" resultType="int">
+        SELECT COUNT(*) FROM heritage
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT IGNORE INTO heritage (name, name_hanja, category, period, location, thumbnail_url, ccba_kdcd, ccba_asno, ccba_ctcd)
+        VALUES (
+            #{name}, #{nameHanja}, #{category}, #{period},
+            ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326), <!-- SRID 4326: POINT(위도, 경도) 순서가 WGS84 표준 -->
+            #{thumbnailUrl}, #{ccbaKdcd}, #{ccbaAsno}, #{ccbaCtcd}
+        )
+    </insert>
+
+    <select id="findIdByCode" resultType="Long">
+        SELECT id FROM heritage
+        WHERE ccba_kdcd = #{kdcd} AND ccba_asno = #{asno} AND ccba_ctcd = #{ctcd}
+    </select>
+
+    <insert id="insertMedia">
+        INSERT INTO heritage_media (heritage_id, url, caption, source)
+        VALUES (#{heritageId}, #{url}, #{caption}, #{source})
+    </insert>
+
+    <insert id="insertDescription">
+        INSERT INTO heritage_descriptions (heritage_id, content, depth_level, topic, parent_id, source)
+        VALUES (#{heritageId}, #{content}, #{depthLevel}, #{topic}, #{parentId}, #{source})
+    </insert>
+
+    <select id="findNearby" resultType="com.histour.domain.heritage.entity.Heritage">
+        SELECT
+            id, name, name_hanja, category, period,
+            ST_Latitude(location)  AS lat,
+            ST_Longitude(location) AS lng,
+            thumbnail_url
+        FROM heritage
+        WHERE ST_Distance_Sphere(
+            location,
+            ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326)
+        ) &lt;= 500
+        ORDER BY ST_Distance_Sphere(
+            location,
+            ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326)
+        )
+        LIMIT 5
+    </select>
 
 </mapper>
