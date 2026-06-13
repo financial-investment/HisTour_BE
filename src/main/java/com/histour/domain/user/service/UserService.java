@@ -1,8 +1,8 @@
 package com.histour.domain.user.service;
 
-import com.histour.domain.user.dto.User;
 import com.histour.domain.user.dto.UserRegistRequest;
 import com.histour.domain.user.dto.UserResponse;
+import com.histour.domain.user.entity.User;
 import com.histour.domain.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,11 +20,11 @@ public class UserService {
 
     @Transactional
     public void signUp(UserRegistRequest request) {
-        if (userMapper.existsByEmail(request.email()) > 0) {
+        if (userMapper.existsByEmail(request.email())) {
             throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
         }
 
-        if (userMapper.existsByNickname(request.nickname()) > 0) {
+        if (userMapper.existsByNickname(request.nickname())) {
             throw new IllegalArgumentException("이미 사용 중인 닉네임입니다.");
         }
 
@@ -38,6 +38,7 @@ public class UserService {
         userMapper.save(user);
     }
 
+    @Transactional(readOnly = true)
     public UserResponse getUser(Long userId) {
         User user = userMapper.findById(userId);
 

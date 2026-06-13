@@ -1,5 +1,7 @@
 package com.histour.domain.user.dto;
 
+import com.histour.domain.user.entity.User;
+
 public record UserResponse(
         Long id,
         String email,

@@ -3,7 +3,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.histour.domain.user.mapper.UserMapper">
-    <insert id="save" parameterType="com.histour.domain.user.dto.User"
+    <insert id="save" parameterType="com.histour.domain.user.entity.User"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO users (
         email,
@@ -21,7 +21,7 @@
         )
     </insert>
 
-    <select id="findById" resultType="com.histour.domain.user.dto.User">
+    <select id="findById" resultType="com.histour.domain.user.entity.User">
         SELECT
         id,
         email,
@@ -49,7 +49,7 @@
 
 
 
-    <select id="findByEmail" resultType="com.histour.domain.user.dto.User">
+    <select id="findByEmail" resultType="com.histour.domain.user.entity.User">
         SELECT
         id,
         email,

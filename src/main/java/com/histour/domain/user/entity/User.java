@@ -1,4 +1,4 @@
-package com.histour.domain.user.dto;
+package com.histour.domain.user.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

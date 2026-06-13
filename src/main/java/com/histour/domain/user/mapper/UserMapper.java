@@ -1,6 +1,6 @@
 package com.histour.domain.user.mapper;
 
-import com.histour.domain.user.dto.User;
+import com.histour.domain.user.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
@@ -12,7 +12,7 @@ public interface UserMapper {
 
     User findByEmail(String email);
 
-    int existsByNickname(String nickname);
+    boolean existsByNickname(String nickname);
 
-    int existsByEmail(String email);
+    boolean existsByEmail(String email);
 }
