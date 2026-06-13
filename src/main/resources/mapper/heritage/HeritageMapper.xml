@@ -11,7 +11,7 @@
         INSERT IGNORE INTO heritage (name, name_hanja, category, period, location, thumbnail_url, ccba_kdcd, ccba_asno, ccba_ctcd)
         VALUES (
             #{name}, #{nameHanja}, #{category}, #{period},
-            ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326),
+            ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326), <!-- SRID 4326: POINT(위도, 경도) 순서가 WGS84 표준 -->
             #{thumbnailUrl}, #{ccbaKdcd}, #{ccbaAsno}, #{ccbaCtcd}
         )
     </insert>
