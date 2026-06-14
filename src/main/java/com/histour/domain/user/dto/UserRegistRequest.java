@@ -16,6 +16,5 @@ public record UserRegistRequest (
     @Size(min = 8, message = "비밀번호는 8자 이상이어야 합니다.")
     String password,
 
-    @NotBlank(message = "선호 언어는 필수입니다.")
     String preferredLang
 ){}

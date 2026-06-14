@@ -53,7 +53,6 @@
         SELECT
         id,
         email,
-        password,
         nickname,
         preferred_lang AS preferredLang,
         created_at AS createdAt
