@@ -36,7 +36,7 @@ public class JwtVerificationFilter extends OncePerRequestFilter {
 
         String token = bearerToken.substring(7);
 
-        if (!jwtProvider.validateToken(token)) {
+        if (!jwtProvider.validateToken(token) || !jwtProvider.isAccessToken(token)) {
             filterChain.doFilter(request, response);
             return;
         }

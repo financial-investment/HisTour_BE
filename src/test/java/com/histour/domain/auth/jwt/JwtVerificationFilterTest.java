@@ -39,6 +39,7 @@ class JwtVerificationFilterTest {
         MockFilterChain filterChain = new MockFilterChain();
 
         when(jwtProvider.validateToken("valid-token")).thenReturn(true);
+        when(jwtProvider.isAccessToken("valid-token")).thenReturn(true);
         when(jwtProvider.getUserId("valid-token")).thenReturn(1L);
 
         filter.doFilter(request, response, filterChain);
@@ -50,6 +51,24 @@ class JwtVerificationFilterTest {
         assertThat(authentication.isAuthenticated()).isTrue();
         assertThat(authentication.getPrincipal()).isEqualTo(1L);
         assertThat(authentication.getAuthorities()).isEmpty();
+    }
+
+    @Test
+    void doesNotSetAuthenticationWhenTokenIsRefreshToken() throws ServletException, IOException {
+        // Refresh tokens are valid JWTs, but they must not be accepted as API access tokens.
+        // JwtVerificationFilter should authenticate only tokens whose type claim is "access".
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer refresh-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain filterChain = new MockFilterChain();
+
+        when(jwtProvider.validateToken("refresh-token")).thenReturn(true);
+        when(jwtProvider.isAccessToken("refresh-token")).thenReturn(false);
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(jwtProvider, never()).getUserId("refresh-token");
     }
 
     @Test

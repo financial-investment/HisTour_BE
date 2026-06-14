@@ -11,6 +11,10 @@ import java.util.Date;
 
 @Component
 public class JwtProvider {
+    private static final String TOKEN_TYPE_CLAIM = "type";
+    private static final String ACCESS_TOKEN_TYPE = "access";
+    private static final String REFRESH_TOKEN_TYPE = "refresh";
+
     private final long accessExpMin;
     private final long refreshExpMin;
     private final SecretKey key;
@@ -27,23 +31,24 @@ public class JwtProvider {
      * Access Token 생성
      */
     public String createAccessToken(Long userId) {
-        return createToken(userId, accessExpMin);
+        return createToken(userId, accessExpMin, ACCESS_TOKEN_TYPE);
     }
 
     /**
      * Refresh Token 생성
      */
     public String createRefreshToken(Long userId) {
-        return createToken(userId, refreshExpMin);
+        return createToken(userId, refreshExpMin, REFRESH_TOKEN_TYPE);
     }
 
-    private String createToken(Long userId, long expiration) {
+    private String createToken(Long userId, long expiration, String tokenType) {
 
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
 
         return Jwts.builder()
                 .subject(String.valueOf(userId))
+                .claim(TOKEN_TYPE_CLAIM, tokenType)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(key)
@@ -56,10 +61,7 @@ public class JwtProvider {
     public boolean validateToken(String token) {
         try {
 
-            Jwts.parser()
-                    .verifyWith(key)
-                    .build()
-                    .parseSignedClaims(token);
+            parseClaims(token);
 
             return true;
 
@@ -73,15 +75,30 @@ public class JwtProvider {
      */
     public Long getUserId(String token) {
 
-        Claims claims = Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+        Claims claims = parseClaims(token);
 
         return Long.parseLong(claims.getSubject());
     }
 
+    public boolean isAccessToken(String token) {
+        return ACCESS_TOKEN_TYPE.equals(getTokenType(token));
+    }
+
+    public boolean isRefreshToken(String token) {
+        return REFRESH_TOKEN_TYPE.equals(getTokenType(token));
+    }
+
+    private String getTokenType(String token) {
+        return parseClaims(token).get(TOKEN_TYPE_CLAIM, String.class);
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
 
 
 }

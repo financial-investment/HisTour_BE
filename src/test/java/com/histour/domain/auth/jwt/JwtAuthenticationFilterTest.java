@@ -82,12 +82,15 @@ class JwtAuthenticationFilterTest {
                 null
         );
         when(jwtProvider.createAccessToken(1L)).thenReturn("access-token");
+        when(jwtProvider.createRefreshToken(1L)).thenReturn("refresh-token");
 
         filter.successfulAuthentication(request, response, chain, authentication);
 
-        // The login response should contain only the access token for now.
-        // Refresh token behavior is intentionally not covered here yet.
+        // Login returns both tokens now:
+        // accessToken is used in Authorization: Bearer for normal API calls.
+        // refreshToken is used only at /api/auth/refresh to issue a new token pair.
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(response.getContentAsString()).contains("\"accessToken\":\"access-token\"");
+        assertThat(response.getContentAsString()).contains("\"refreshToken\":\"refresh-token\"");
     }
 }
