@@ -3,4 +3,19 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.histour.domain.trip.TripMapper">
 
+    <insert id="insertVisitLog" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO visit_logs (trip_id, heritage_id, photo_url, location, explanation, visited_at)
+        VALUES (
+            #{tripId}, #{heritageId}, #{photoUrl},
+            ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326),
+            #{explanation}, NOW()
+        )
+    </insert>
+
+    <select id="findVisitLogById" resultType="com.histour.domain.trip.VisitLog">
+        SELECT id, trip_id, heritage_id, explanation
+        FROM visit_logs
+        WHERE id = #{id}
+    </select>
+
 </mapper>
