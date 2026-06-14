@@ -30,6 +30,7 @@ public class UserService {
                 .nickname(request.nickname())
                 .email(request.email())
                 .password(passwordEncoder.encode(request.password()))
+                .preferredLang(request.preferredLang())
                 .build();
 
         userMapper.save(user);

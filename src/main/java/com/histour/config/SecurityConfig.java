@@ -6,6 +6,8 @@ import com.histour.domain.auth.jwt.JwtProvider;
 import com.histour.domain.auth.jwt.JwtVerificationFilter;
 import com.histour.domain.auth.security.CustomAccessDeniedHandler;
 import com.histour.domain.auth.security.CustomAuthenticationEntryPoint;
+import com.histour.domain.auth.service.RefreshTokenService;
+import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -45,9 +47,17 @@ public class SecurityConfig {
     public JwtAuthenticationFilter jwtAuthenticationFilter(
             AuthenticationManager authenticationManager,
             JwtProvider jwtProvider,
-            ObjectMapper objectMapper
+            RefreshTokenService refreshTokenService,
+            ObjectMapper objectMapper,
+            Validator validator
     ) {
-        return new JwtAuthenticationFilter(authenticationManager, jwtProvider, objectMapper);
+        return new JwtAuthenticationFilter(
+                authenticationManager,
+                jwtProvider,
+                refreshTokenService,
+                objectMapper,
+                validator
+        );
     }
 
     @Bean
