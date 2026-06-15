@@ -1,6 +1,5 @@
 package com.histour.api.controller;
 
-import com.histour.client.GmsAiClient;
 import com.histour.common.response.ApiResponse;
 import com.histour.domain.heritage.dto.ExplainRequest;
 import com.histour.domain.heritage.dto.ExplainResponse;
@@ -20,7 +19,6 @@ import org.springframework.web.bind.annotation.*;
 public class HeritageController {
 
     private final HeritageService heritageService;
-    private final GmsAiClient gmsAiClient;
 
     @Operation(
         summary = "문화재 기본 해설",
@@ -54,10 +52,4 @@ public class HeritageController {
         return ApiResponse.ok(heritageService.explainDeeper(heritageId, visitLogId));
     }
 
-    @Operation(summary = "GMS API 연결 테스트", hidden = true)
-    @GetMapping("/test-gms")
-    public ApiResponse<String> testGms() {
-        String result = gmsAiClient.testTextOnly();
-        return ApiResponse.ok(result);
-    }
 }

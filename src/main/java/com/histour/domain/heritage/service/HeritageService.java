@@ -10,7 +10,6 @@ import com.histour.domain.trip.TripMapper;
 import com.histour.domain.trip.VisitLog;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,7 +24,6 @@ public class HeritageService {
     private final TripMapper tripMapper;
     private final GmsAiClient gmsAiClient;
 
-    @Transactional
     public ExplainResponse explain(ExplainRequest request) {
         // 1. 반경 500m 문화재 조회
         List<Heritage> candidates = heritageMapper.findNearby(request.lat(), request.lng());
@@ -70,23 +68,22 @@ public class HeritageService {
         return new ExplainResponse(identified.getId(), identified.getName(), result.explanation(), visitLogId);
     }
 
-    @Transactional
     public ExplainResponse explainDeeper(Long heritageId, Long visitLogId) {
         Heritage heritage = heritageMapper.findById(heritageId);
         if (heritage == null) {
             throw new NoSuchElementException("문화재를 찾을 수 없습니다.");
         }
 
+        // visitLog 먼저 검증
+        VisitLog visitLog = tripMapper.findVisitLogById(visitLogId);
+        if (visitLog == null || visitLog.getExplanation() == null) {
+            throw new IllegalStateException("기본 해설이 없습니다. 먼저 해설을 요청하세요.");
+        }
+
         // level 2 캐시 확인
         HeritageDescription cached = heritageMapper.findAiDescription(heritageId, 2);
         if (cached != null) {
             return new ExplainResponse(heritageId, heritage.getName(), cached.getContent(), null);
-        }
-
-        // visit_log에서 기본 해설 조회
-        VisitLog visitLog = tripMapper.findVisitLogById(visitLogId);
-        if (visitLog == null || visitLog.getExplanation() == null) {
-            throw new IllegalStateException("기본 해설이 없습니다. 먼저 해설을 요청하세요.");
         }
 
         // 심화 해설 생성

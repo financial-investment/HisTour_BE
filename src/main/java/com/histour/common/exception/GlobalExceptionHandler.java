@@ -1,6 +1,7 @@
 package com.histour.common.exception;
 
 import com.histour.common.response.ApiResponse;
+import com.histour.common.exception.GmsApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.FieldError;
@@ -44,6 +45,13 @@ public class GlobalExceptionHandler {
                 .orElse("요청 값이 올바르지 않습니다.");
 
         return ApiResponse.error(message);
+    }
+
+    @ExceptionHandler(GmsApiException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public ApiResponse<Void> handleGmsApi(GmsApiException e) {
+        log.error("GMS API 오류: {}", e.getMessage(), e);
+        return ApiResponse.error("AI 서비스에 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     }
 
     @ExceptionHandler(Exception.class)

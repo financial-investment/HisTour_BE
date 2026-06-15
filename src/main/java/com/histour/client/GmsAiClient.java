@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.histour.common.exception.GmsApiException;
 import com.histour.domain.heritage.entity.Heritage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -87,14 +88,14 @@ public class GmsAiClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 log.error("GMS API 오류 [{}]: {}", response.statusCode(), response.body());
-                throw new RuntimeException("GMS API 오류: " + response.statusCode());
+                throw new GmsApiException("GMS API 오류: " + response.statusCode());
             }
             return parseResponse(response.body());
-        } catch (RuntimeException e) {
+        } catch (GmsApiException e) {
             throw e;
         } catch (Exception e) {
             log.error("GMS API 호출 실패: {}", e.getMessage());
-            throw new RuntimeException("AI 해설 생성에 실패했습니다.", e);
+            throw new GmsApiException("AI 해설 생성에 실패했습니다.", e);
         }
     }
 
@@ -247,17 +248,21 @@ public class GmsAiClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 log.error("GMS Anthropic API 오류 [{}]: {}", response.statusCode(), response.body());
-                throw new RuntimeException("GMS API 오류: " + response.statusCode());
+                throw new GmsApiException("GMS API 오류: " + response.statusCode());
             }
             JsonNode root = objectMapper.readTree(response.body());
-            String content = root.path("content").get(0).path("text").asText();
+            JsonNode contentArray = root.path("content");
+            if (!contentArray.isArray() || contentArray.isEmpty()) {
+                throw new GmsApiException("GMS Anthropic 응답에 content가 없습니다.");
+            }
+            String content = contentArray.get(0).path("text").asText();
             String json = extractJson(content);
             return objectMapper.readTree(json).path("explanation").asText("");
-        } catch (RuntimeException e) {
+        } catch (GmsApiException e) {
             throw e;
         } catch (Exception e) {
             log.error("GMS 심화해설 API 호출 실패: {}", e.getMessage());
-            throw new RuntimeException("AI 심화 해설 생성에 실패했습니다.", e);
+            throw new GmsApiException("AI 심화 해설 생성에 실패했습니다.", e);
         }
     }
 
@@ -302,31 +307,24 @@ public class GmsAiClient {
         }
     }
 
-    public String testTextOnly() {
-        try {
-            String body = "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
-            HttpRequest req = HttpRequest.newBuilder().uri(URI.create(apiUrl))
-                    .header("Content-Type", "application/json").header("Authorization", "Bearer " + apiKey)
-                    .timeout(Duration.ofSeconds(30)).POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
-            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-            return "status=" + resp.statusCode();
-        } catch (Exception e) {
-            return "error: " + e.getMessage();
-        }
-    }
-
     private ExplainResult parseResponse(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
-            String content = root.path("choices").get(0).path("message").path("content").asText();
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                throw new GmsApiException("GMS 응답에 choices가 없습니다.");
+            }
+            String content = choices.get(0).path("message").path("content").asText();
             String json = extractJson(content);
             JsonNode result = objectMapper.readTree(json);
             int index = result.path("heritageIndex").asInt(0);
             String explanation = result.path("explanation").asText("");
             return new ExplainResult(index, explanation);
+        } catch (GmsApiException e) {
+            throw e;
         } catch (Exception e) {
             log.error("GMS 응답 파싱 실패: {}", responseBody);
-            throw new RuntimeException("AI 응답 파싱에 실패했습니다.", e);
+            throw new GmsApiException("AI 응답 파싱에 실패했습니다.", e);
         }
     }
 

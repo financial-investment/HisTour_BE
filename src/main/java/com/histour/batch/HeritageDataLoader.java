@@ -36,11 +36,6 @@ public class HeritageDataLoader implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        if (heritageMapper.count() > 0) {
-            log.info("heritage 데이터가 이미 존재합니다. 로더를 건너뜁니다.");
-            return;
-        }
-
         String regionLabel = filterCtcd.isBlank() ? "전국" : "ctcd=" + filterCtcd;
         log.info("=== 국가유산청 데이터 적재 시작 [{}] ===", regionLabel);
         int total = 0;
@@ -81,6 +76,11 @@ public class HeritageDataLoader implements ApplicationRunner {
         String kdcd = listItem.getCcbaKdcd();
         String asno = listItem.getCcbaAsno();
         String ctcd = listItem.getCcbaCtcd();
+
+        // 이미 적재된 항목은 API 호출 없이 건너뜀 (이어서 적재 지원)
+        if (heritageMapper.findIdByCode(kdcd, asno, ctcd) != null) {
+            return;
+        }
 
         HeritageApiClient.DetailItem detail = apiClient.fetchDetail(kdcd, asno, ctcd);
         Thread.sleep(100);
