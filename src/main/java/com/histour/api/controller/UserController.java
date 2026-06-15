@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -26,13 +27,10 @@ public class UserController {
                 .body(ApiResponse.ok(null));
     }
 
-    @GetMapping("/{userId}")
-    public ResponseEntity<ApiResponse<UserResponse>> getUser(@PathVariable Long userId) {
-        return ResponseEntity.ok(
-                ApiResponse.ok(
-                        userService.getUser(userId)
-                )
-        );
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse> getMyInfo(Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ResponseEntity.ok(ApiResponse.ok(userService.getUser(userId)));
     }
 
 }
