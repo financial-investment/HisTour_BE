@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    username: root
+    password: ${DB_PASSWORD:1234}
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+gms:
+  api:
+    key: ${GMS_API_KEY:S15P02AM11-01a73931-9677-43e3-82ea-350230c9d59e}
