@@ -35,3 +35,9 @@ heritage:
     location-url: https://www.gis-heritage.go.kr/openapi/xmlService/spca.do
   loader:
     enabled: false
+
+gms:
+  api:
+    url: https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions
+    anthropic-url: https://gms.ssafy.io/gmsapi/api.anthropic.com/v1/messages
+    key: ${GMS_API_KEY}
