@@ -28,7 +28,7 @@ public class UserController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse> getMyInfo(Authentication authentication) {
+    public ResponseEntity<ApiResponse<UserResponse>> getMyInfo(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         return ResponseEntity.ok(ApiResponse.ok(userService.getUser(userId)));
     }
