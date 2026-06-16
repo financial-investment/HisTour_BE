@@ -15,5 +15,9 @@ public interface HeritageMapper {
     Long findIdByCode(@Param("kdcd") String kdcd, @Param("asno") String asno, @Param("ctcd") String ctcd);
     void insertMedia(HeritageMedia media);
     void insertDescription(HeritageDescription description);
+    Heritage findById(@Param("id") Long id);
     List<Heritage> findNearby(@Param("lat") double lat, @Param("lng") double lng);
+    List<HeritageDescription> findDescriptions(@Param("heritageId") Long heritageId);
+    List<HeritageMedia> findMedia(@Param("heritageId") Long heritageId);
+    HeritageDescription findAiDescription(@Param("heritageId") Long heritageId, @Param("depthLevel") int depthLevel);
 }

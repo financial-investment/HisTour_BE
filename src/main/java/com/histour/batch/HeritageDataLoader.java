@@ -7,6 +7,7 @@ import com.histour.domain.heritage.entity.HeritageMedia;
 import com.histour.domain.heritage.mapper.HeritageMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -27,17 +28,16 @@ public class HeritageDataLoader implements ApplicationRunner {
     private final HeritageApiClient apiClient;
     private final HeritageMapper heritageMapper;
 
+    @Value("${heritage.loader.ctcd:}")
+    private String filterCtcd;  // 비어있으면 전국, "11"이면 서울만
+
     // 무형문화재(17, 22)는 GPS 좌표 없어서 제외
     private static final String[] CATEGORIES = {"11", "12", "13", "14", "15", "16", "21", "23", "24"};
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        if (heritageMapper.count() > 0) {
-            log.info("heritage 데이터가 이미 존재합니다. 로더를 건너뜁니다.");
-            return;
-        }
-
-        log.info("=== 국가유산청 데이터 적재 시작 ===");
+        String regionLabel = filterCtcd.isBlank() ? "전국" : "ctcd=" + filterCtcd;
+        log.info("=== 국가유산청 데이터 적재 시작 [{}] ===", regionLabel);
         int total = 0;
         for (String kdcd : CATEGORIES) {
             log.info("카테고리 {} 적재 시작", kdcd);
@@ -49,9 +49,10 @@ public class HeritageDataLoader implements ApplicationRunner {
     private int loadCategory(String kdcd) throws InterruptedException {
         int loaded = 0;
         int pageIndex = 1;
+        String ctcd = filterCtcd.isBlank() ? null : filterCtcd;
 
         while (true) {
-            List<HeritageApiClient.ListItem> items = apiClient.fetchList(kdcd, null, pageIndex);
+            List<HeritageApiClient.ListItem> items = apiClient.fetchList(kdcd, ctcd, pageIndex);
             if (items.isEmpty()) break;
 
             for (HeritageApiClient.ListItem item : items) {
@@ -75,6 +76,11 @@ public class HeritageDataLoader implements ApplicationRunner {
         String kdcd = listItem.getCcbaKdcd();
         String asno = listItem.getCcbaAsno();
         String ctcd = listItem.getCcbaCtcd();
+
+        // 이미 적재된 항목은 API 호출 없이 건너뜀 (이어서 적재 지원)
+        if (heritageMapper.findIdByCode(kdcd, asno, ctcd) != null) {
+            return;
+        }
 
         HeritageApiClient.DetailItem detail = apiClient.fetchDetail(kdcd, asno, ctcd);
         Thread.sleep(100);

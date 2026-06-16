@@ -31,6 +31,40 @@
         VALUES (#{heritageId}, #{content}, #{depthLevel}, #{topic}, #{parentId}, #{source})
     </insert>
 
+    <select id="findDescriptions" resultType="com.histour.domain.heritage.entity.HeritageDescription">
+        SELECT id, heritage_id, content, depth_level, topic, parent_id, source
+        FROM heritage_descriptions
+        WHERE heritage_id = #{heritageId}
+        ORDER BY depth_level
+    </select>
+
+    <select id="findMedia" resultType="com.histour.domain.heritage.entity.HeritageMedia">
+        SELECT id, heritage_id, url, caption, source
+        FROM heritage_media
+        WHERE heritage_id = #{heritageId}
+        LIMIT 5
+    </select>
+
+    <select id="findById" resultType="com.histour.domain.heritage.entity.Heritage">
+        SELECT
+            id, name, name_hanja, category, period,
+            ST_Latitude(location)  AS lat,
+            ST_Longitude(location) AS lng,
+            thumbnail_url
+        FROM heritage
+        WHERE id = #{id}
+    </select>
+
+    <select id="findAiDescription" resultType="com.histour.domain.heritage.entity.HeritageDescription">
+        SELECT id, heritage_id, content, depth_level, topic, parent_id, source
+        FROM heritage_descriptions
+        WHERE heritage_id = #{heritageId}
+          AND source = 'AI_GENERATED'
+          AND depth_level = #{depthLevel}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
     <select id="findNearby" resultType="com.histour.domain.heritage.entity.Heritage">
         SELECT
             id, name, name_hanja, category, period,

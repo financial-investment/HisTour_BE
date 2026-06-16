@@ -1,6 +1,8 @@
 package com.histour.common.exception;
 
 import com.histour.common.response.ApiResponse;
+import com.histour.common.exception.GmsApiException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -10,12 +12,19 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.NoSuchElementException;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleIllegalArgument(IllegalArgumentException e) {
+        return ApiResponse.error(e.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleIllegalState(IllegalStateException e) {
         return ApiResponse.error(e.getMessage());
     }
 
@@ -38,9 +47,17 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(message);
     }
 
+    @ExceptionHandler(GmsApiException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public ApiResponse<Void> handleGmsApi(GmsApiException e) {
+        log.error("GMS API 오류: {}", e.getMessage(), e);
+        return ApiResponse.error("AI 서비스에 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleGeneral(Exception e) {
+        log.error("Unhandled exception: {}", e.getMessage(), e);
         return ApiResponse.error("서버 오류가 발생했습니다.");
     }
 }
