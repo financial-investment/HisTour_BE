@@ -26,6 +26,7 @@
         id,
         email,
         nickname,
+        password,
         preferred_lang AS preferredLang,
         created_at AS createdAt
         FROM users
@@ -53,6 +54,7 @@
         SELECT
         id,
         email,
+        password,
         nickname,
         preferred_lang AS preferredLang,
         created_at AS createdAt
