@@ -16,14 +16,9 @@ public class TripService {
 
     public List<TripResponse> getMyTrips(Long userId) {
         return tripMapper.findTripsByUserId(userId).stream()
-                .map(t -> TripResponse.builder()
-                        .tripId(t.getId())
-                        .title(t.getTitle())
-                        .tripDate(t.getTripDate())
-                        .status(t.getStatus())
-                        .createdAt(t.getCreatedAt())
-                        .visitCount(t.getVisitCount())
-                        .build())
+                .map(t -> new TripResponse(
+                        t.getId(), t.getTitle(), t.getTripDate(),
+                        t.getStatus(), t.getCreatedAt(), t.getVisitCount(), null))
                 .toList();
     }
 
@@ -51,15 +46,9 @@ public class TripService {
     public TripResponse getTrip(Long tripId, Long userId) {
         Trip trip = findAndValidateOwner(tripId, userId);
         List<VisitLog> visitLogs = tripMapper.findVisitLogsByTripId(tripId);
-        return TripResponse.builder()
-                .tripId(trip.getId())
-                .title(trip.getTitle())
-                .tripDate(trip.getTripDate())
-                .status(trip.getStatus())
-                .createdAt(trip.getCreatedAt())
-                .visitCount(visitLogs.size())
-                .visitLogs(visitLogs)
-                .build();
+        return new TripResponse(
+                trip.getId(), trip.getTitle(), trip.getTripDate(),
+                trip.getStatus(), trip.getCreatedAt(), visitLogs.size(), visitLogs);
     }
 
     private Trip findAndValidateOwner(Long tripId, Long userId) {
