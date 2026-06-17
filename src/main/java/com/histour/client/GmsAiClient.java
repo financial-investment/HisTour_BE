@@ -24,6 +24,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,9 @@ public class GmsAiClient {
 
     @Value("${gms.api.anthropic-url}")
     private String anthropicUrl;
+
+    @Value("${gms.api.embedding-url}")
+    private String embeddingUrl;
 
     @Value("${gms.api.key}")
     private String apiKey;
@@ -325,6 +329,100 @@ public class GmsAiClient {
         } catch (Exception e) {
             log.error("GMS 응답 파싱 실패: {}", responseBody);
             throw new GmsApiException("AI 응답 파싱에 실패했습니다.", e);
+        }
+    }
+
+    public List<Float> createEmbedding(String text) {
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("model", "text-embedding-3-small");
+            body.put("input", text);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(embeddingUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .timeout(Duration.ofSeconds(30))
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new GmsApiException("임베딩 API 오류: " + response.statusCode());
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode data = root.path("data");
+            if (!data.isArray() || data.isEmpty()) {
+                throw new GmsApiException("임베딩 응답에 data가 없습니다.");
+            }
+            JsonNode embedding = data.get(0).path("embedding");
+            List<Float> result = new ArrayList<>();
+            for (JsonNode v : embedding) {
+                result.add((float) v.asDouble());
+            }
+            return result;
+        } catch (GmsApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new GmsApiException("임베딩 생성 실패", e);
+        }
+    }
+
+    public String generateTripSummary(List<String> visitedNames, List<String> recommendedNames) {
+        try {
+            StringBuilder userContent = new StringBuilder();
+            userContent.append("방문한 문화재: ").append(String.join(", ", visitedNames)).append("\n");
+            if (!recommendedNames.isEmpty()) {
+                userContent.append("다음 여행 추천 문화재: ").append(String.join(", ", recommendedNames)).append("\n");
+            }
+            userContent.append("""
+
+                    위 여행 기록을 바탕으로 여행 요약과 다음 여행 추천 문구를 작성해주세요.
+                    반드시 아래 JSON 형식으로만 응답하세요:
+                    {"summary": "<2~3문장의 여행 요약 및 다음 여행 추천 문구>"}""");
+
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("model", "gpt-4o");
+            body.put("max_tokens", 500);
+
+            ArrayNode messages = objectMapper.createArrayNode();
+            ObjectNode systemMsg = objectMapper.createObjectNode();
+            systemMsg.put("role", "system");
+            systemMsg.put("content", "당신은 한국 역사 여행 큐레이터입니다. 방문 문화재를 바탕으로 여행의 의미와 다음 여행 추천을 따뜻하고 감성적으로 표현해주세요.");
+            messages.add(systemMsg);
+
+            ObjectNode userMsg = objectMapper.createObjectNode();
+            userMsg.put("role", "user");
+            userMsg.put("content", userContent.toString());
+            messages.add(userMsg);
+            body.set("messages", messages);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .timeout(Duration.ofSeconds(30))
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new GmsApiException("여행 요약 API 오류: " + response.statusCode());
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                throw new GmsApiException("여행 요약 응답에 choices가 없습니다.");
+            }
+            String content = choices.get(0).path("message").path("content").asText();
+            String json = extractJson(content);
+            return objectMapper.readTree(json).path("summary").asText("");
+        } catch (GmsApiException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new GmsApiException("여행 요약 생성 실패", e);
         }
     }
 
