@@ -62,8 +62,10 @@ public class HeritageController {
             @Parameter(description = "문화재 ID", example = "1") @PathVariable Long heritageId,
             @Parameter(description = "/explain 응답에서 받은 visitLogId", example = "5", required = true) @RequestParam Long visitLogId,
             @Parameter(description = "심화 해설 주제 (STORY·PERSON·ARCHITECTURE·CONTEXT·MODERN), 미지정 시 종합 해설")
-                @RequestParam(required = false) ExplainTopic topic) {
-        return ApiResponse.ok(heritageService.explainDeeper(heritageId, visitLogId, topic));
+                @RequestParam(required = false) ExplainTopic topic,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(heritageService.explainDeeper(heritageId, visitLogId, topic, userId));
     }
 
 }

@@ -45,9 +45,15 @@ public class RecommendService {
             return List.of();
         }
 
-        return knnSearch(avgVector, 50).stream()
+        List<Long> candidateIds = knnSearch(avgVector, 50).stream()
                 .filter(id -> !visitedIds.contains(id))
-                .map(id -> buildRecommended(id, lat, lng))
+                .collect(Collectors.toList());
+
+        Map<Long, String> thumbnails = heritageMapper.findByIds(candidateIds).stream()
+                .collect(Collectors.toMap(Heritage::getId, h -> h.getThumbnailUrl() != null ? h.getThumbnailUrl() : ""));
+
+        return candidateIds.stream()
+                .map(id -> buildRecommended(id, lat, lng, thumbnails.get(id)))
                 .filter(Objects::nonNull)
                 .filter(r -> r.distanceM() <= radiusKm * 1000)
                 .sorted(Comparator.comparingInt(RecommendedHeritage::distanceM))
@@ -96,19 +102,24 @@ public class RecommendService {
         }
     }
 
-    private RecommendedHeritage buildRecommended(Long id, double userLat, double userLng) {
+    private RecommendedHeritage buildRecommended(Long id, double userLat, double userLng, String thumbnailUrl) {
         Map<byte[], byte[]> rawFields = jedisPooled.hgetAll((EmbeddingLoader.KEY_PREFIX + id).getBytes());
         if (rawFields.isEmpty()) return null;
 
         Map<String, String> fields = new HashMap<>();
-        rawFields.forEach((k, v) -> fields.put(new String(k), new String(v)));
+        rawFields.forEach((k, v) -> fields.put(new String(k, java.nio.charset.StandardCharsets.UTF_8),
+                                               new String(v, java.nio.charset.StandardCharsets.UTF_8)));
 
-        double hLat = Double.parseDouble(fields.getOrDefault("lat", "0"));
-        double hLng = Double.parseDouble(fields.getOrDefault("lng", "0"));
+        double hLat;
+        double hLng;
+        try {
+            hLat = Double.parseDouble(fields.getOrDefault("lat", "0"));
+            hLng = Double.parseDouble(fields.getOrDefault("lng", "0"));
+        } catch (NumberFormatException e) {
+            log.warn("[추천] 좌표 파싱 실패 heritage_id={}", id);
+            return null;
+        }
         int distM = (userLat == 0 && userLng == 0) ? 0 : (int) haversineMeters(userLat, userLng, hLat, hLng);
-
-        Heritage heritage = heritageMapper.findById(id);
-        String thumbnailUrl = heritage != null ? heritage.getThumbnailUrl() : null;
 
         return new RecommendedHeritage(id, fields.getOrDefault("name", ""), thumbnailUrl, hLat, hLng, distM);
     }
@@ -118,7 +129,7 @@ public class RecommendService {
                 (EmbeddingLoader.KEY_PREFIX + id).getBytes(),
                 field.getBytes()
         );
-        return val == null ? null : new String(val);
+        return val == null ? null : new String(val, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private List<Float> toFloatList(byte[] bytes) {

@@ -58,9 +58,15 @@ public class CourseService {
         if (avgVector == null) return null;
 
         // KNN 100개 → 방문 제외 → CourseHeritage 빌드 (KNN 유사도 순서 유지)
-        List<CourseHeritage> candidates = recommendService.knnSearch(avgVector, 100).stream()
+        List<Long> candidateIds = recommendService.knnSearch(avgVector, 100).stream()
                 .filter(id -> !visitedIds.contains(id))
-                .map(this::buildCourseHeritage)
+                .collect(Collectors.toList());
+
+        Map<Long, String> thumbnails = heritageMapper.findByIds(candidateIds).stream()
+                .collect(Collectors.toMap(Heritage::getId, h -> h.getThumbnailUrl() != null ? h.getThumbnailUrl() : ""));
+
+        List<CourseHeritage> candidates = candidateIds.stream()
+                .map(id -> buildCourseHeritage(id, thumbnails.get(id)))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
@@ -113,18 +119,23 @@ public class CourseService {
         return new CourseResponse(ctcd, regionName, ordered);
     }
 
-    private CourseHeritage buildCourseHeritage(Long id) {
+    private CourseHeritage buildCourseHeritage(Long id, String thumbnailUrl) {
         Map<byte[], byte[]> rawFields = jedisPooled.hgetAll((EmbeddingLoader.KEY_PREFIX + id).getBytes());
         if (rawFields.isEmpty()) return null;
 
         Map<String, String> fields = new HashMap<>();
-        rawFields.forEach((k, v) -> fields.put(new String(k), new String(v)));
+        rawFields.forEach((k, v) -> fields.put(new String(k, java.nio.charset.StandardCharsets.UTF_8),
+                                               new String(v, java.nio.charset.StandardCharsets.UTF_8)));
 
-        double lat = Double.parseDouble(fields.getOrDefault("lat", "0"));
-        double lng = Double.parseDouble(fields.getOrDefault("lng", "0"));
-
-        Heritage heritage = heritageMapper.findById(id);
-        String thumbnailUrl = heritage != null ? heritage.getThumbnailUrl() : null;
+        double lat;
+        double lng;
+        try {
+            lat = Double.parseDouble(fields.getOrDefault("lat", "0"));
+            lng = Double.parseDouble(fields.getOrDefault("lng", "0"));
+        } catch (NumberFormatException e) {
+            log.warn("[코스] 좌표 파싱 실패 heritage_id={}", id);
+            return null;
+        }
 
         return new CourseHeritage(id, fields.getOrDefault("name", ""), thumbnailUrl, lat, lng, 0);
     }
@@ -140,7 +151,7 @@ public class CourseService {
             CourseHeritage current = route.get(route.size() - 1);
             CourseHeritage nearest = remaining.stream()
                     .min(Comparator.comparingDouble(h -> haversineKm(current.lat(), current.lng(), h.lat(), h.lng())))
-                    .orElseThrow();
+                    .orElseThrow(() -> new IllegalStateException("경로 계산 중 문화재 목록이 비어있습니다."));
             remaining.remove(nearest);
             route.add(nearest);
         }
@@ -149,7 +160,7 @@ public class CourseService {
 
     private String getField(Long id, String field) {
         byte[] val = jedisPooled.hget((EmbeddingLoader.KEY_PREFIX + id).getBytes(), field.getBytes());
-        return val == null ? null : new String(val);
+        return val == null ? null : new String(val, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private double haversineKm(double lat1, double lng1, double lat2, double lng2) {

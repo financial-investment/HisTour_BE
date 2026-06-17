@@ -164,7 +164,11 @@ public class GmsAiClient {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            String content = root.path("choices").get(0).path("message").path("content").asText();
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                throw new GmsApiException("GMS 분류 응답에 choices가 없습니다.");
+            }
+            String content = choices.get(0).path("message").path("content").asText();
             String json = extractJson(content);
             int index = objectMapper.readTree(json).path("heritageIndex").asInt(0);
             JsonNode usage = root.path("usage");
@@ -254,12 +258,18 @@ public class GmsAiClient {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            String content = root.path("choices").get(0).path("message").path("content").asText();
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                throw new GmsApiException("GMS 기본해설 응답에 choices가 없습니다.");
+            }
+            String content = choices.get(0).path("message").path("content").asText();
             JsonNode usage = root.path("usage");
             log.info("[GMS 기본해설 결과] 토큰: prompt={}, completion={}, total={}",
                     usage.path("prompt_tokens").asInt(), usage.path("completion_tokens").asInt(), usage.path("total_tokens").asInt());
             String json = extractJson(content);
-            return objectMapper.readTree(json).path("explanation").asText("");
+            String explanation = objectMapper.readTree(json).path("explanation").asText("");
+            if (explanation.isBlank()) throw new GmsApiException("AI 해설 내용이 비어있습니다.");
+            return explanation;
 
         } catch (GmsApiException e) {
             throw e;
@@ -498,7 +508,7 @@ public class GmsAiClient {
             JsonNode root = objectMapper.readTree(response.body());
             JsonNode choices = root.path("choices");
             if (!choices.isArray() || choices.isEmpty()) {
-                throw new GmsApiException("여행 요약 응답에 choices가 없습니다.");
+                throw new GmsApiException("GMS 여행요약 응답에 choices가 없습니다.");
             }
             String content = choices.get(0).path("message").path("content").asText();
             String json = extractJson(content);

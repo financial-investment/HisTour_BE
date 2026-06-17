@@ -10,6 +10,7 @@ import com.histour.domain.heritage.entity.HeritageMedia;
 import com.histour.domain.heritage.entity.Heritage;
 import com.histour.domain.heritage.entity.HeritageDescription;
 import com.histour.domain.heritage.mapper.HeritageMapper;
+import com.histour.domain.trip.Trip;
 import com.histour.domain.trip.TripMapper;
 import com.histour.domain.trip.VisitLog;
 import lombok.RequiredArgsConstructor;
@@ -126,16 +127,20 @@ public class HeritageService {
         );
     }
 
-    public ExplainResponse explainDeeper(Long heritageId, Long visitLogId, ExplainTopic topic) {
+    public ExplainResponse explainDeeper(Long heritageId, Long visitLogId, ExplainTopic topic, Long userId) {
         Heritage heritage = heritageMapper.findById(heritageId);
         if (heritage == null) {
             throw new NoSuchElementException("문화재를 찾을 수 없습니다.");
         }
 
-        // visitLog 먼저 검증
+        // visitLog 검증 + 소유권 확인
         VisitLog visitLog = tripMapper.findVisitLogById(visitLogId);
         if (visitLog == null || visitLog.getExplanation() == null) {
             throw new IllegalStateException("기본 해설이 없습니다. 먼저 해설을 요청하세요.");
+        }
+        Trip ownerTrip = tripMapper.findTripById(visitLog.getTripId());
+        if (ownerTrip == null || !ownerTrip.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("접근 권한이 없습니다.");
         }
 
         // topic을 캐시 키로 사용 (null이면 종합 해설)

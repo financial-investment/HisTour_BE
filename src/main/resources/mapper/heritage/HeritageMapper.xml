@@ -66,6 +66,17 @@
         LIMIT 1
     </select>
 
+    <select id="findByIds" resultType="com.histour.domain.heritage.entity.Heritage">
+        SELECT id, name, name_hanja, category, period,
+               ST_Latitude(location) AS lat, ST_Longitude(location) AS lng,
+               thumbnail_url
+        FROM heritage
+        WHERE id IN
+        <foreach item="id" collection="ids" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
     <select id="findAllForEmbedding" resultType="com.histour.domain.heritage.entity.Heritage">
         SELECT id, name, name_hanja, category, period,
                ST_Latitude(location) AS lat, ST_Longitude(location) AS lng,
@@ -75,13 +86,12 @@
     </select>
 
     <select id="findVisitedByTripId" resultType="com.histour.domain.heritage.entity.Heritage">
-        SELECT h.id, h.name, h.category, h.period,
+        SELECT DISTINCT h.id, h.name, h.category, h.period,
                ST_Latitude(h.location) AS lat, ST_Longitude(h.location) AS lng,
                h.ccba_ctcd, h.thumbnail_url
         FROM heritage h
         JOIN visit_logs v ON h.id = v.heritage_id
         WHERE v.trip_id = #{tripId}
-        GROUP BY h.id
     </select>
 
     <select id="findNearby" resultType="com.histour.domain.heritage.entity.Heritage">

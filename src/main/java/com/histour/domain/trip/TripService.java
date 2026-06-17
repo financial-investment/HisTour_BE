@@ -4,6 +4,7 @@ import com.histour.domain.trip.dto.TripCreateRequest;
 import com.histour.domain.trip.dto.TripResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -22,6 +23,7 @@ public class TripService {
                 .toList();
     }
 
+    @Transactional
     public Long createTrip(Long userId, TripCreateRequest request) {
         if (tripMapper.countInProgressByUserId(userId) > 0) {
             throw new IllegalStateException("이미 진행 중인 여행이 있습니다.");
