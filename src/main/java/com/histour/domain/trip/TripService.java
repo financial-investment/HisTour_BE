@@ -18,6 +18,7 @@ public class TripService {
 
     private final TripMapper tripMapper;
 
+    @Transactional(readOnly = true)
     public List<TripResponse> getMyTrips(Long userId) {
         return tripMapper.findTripsByUserId(userId).stream()
                 .map(t -> new TripResponse(
@@ -43,6 +44,7 @@ public class TripService {
         return trip.getId();
     }
 
+    @Transactional
     public void completeTrip(Long tripId, Long userId) {
         Trip trip = findAndValidateOwner(tripId, userId);
         if ("COMPLETED".equals(trip.getStatus())) {
@@ -51,6 +53,7 @@ public class TripService {
         tripMapper.updateTripStatus(tripId, "COMPLETED");
     }
 
+    @Transactional(readOnly = true)
     public TripResponse getTrip(Long tripId, Long userId) {
         Trip trip = findAndValidateOwner(tripId, userId);
         List<VisitLog> visitLogs = tripMapper.findVisitLogsByTripId(tripId);
