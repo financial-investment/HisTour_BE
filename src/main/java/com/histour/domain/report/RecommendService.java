@@ -4,6 +4,8 @@ import com.histour.batch.EmbeddingLoader;
 import com.histour.domain.heritage.entity.Heritage;
 import com.histour.domain.heritage.mapper.HeritageMapper;
 import com.histour.domain.report.dto.RecommendedHeritage;
+import com.histour.domain.trip.Trip;
+import com.histour.domain.trip.TripMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,9 +26,14 @@ import java.util.stream.Collectors;
 public class RecommendService {
 
     private final HeritageMapper heritageMapper;
+    private final TripMapper tripMapper;
     private final JedisPooled jedisPooled;
 
     public List<RecommendedHeritage> recommendNearby(Long tripId, Long userId, double lat, double lng, double radiusKm) {
+        Trip trip = tripMapper.findTripById(tripId);
+        if (trip == null) throw new NoSuchElementException("여행을 찾을 수 없습니다.");
+        if (!trip.getUserId().equals(userId)) throw new IllegalArgumentException("접근 권한이 없습니다.");
+
         List<Heritage> visited = heritageMapper.findVisitedByTripId(tripId);
         if (visited.isEmpty()) return List.of();
 
@@ -44,31 +51,6 @@ public class RecommendService {
                 .filter(Objects::nonNull)
                 .filter(r -> r.distanceM() <= radiusKm * 1000)
                 .sorted(Comparator.comparingInt(RecommendedHeritage::distanceM))
-                .limit(5)
-                .collect(Collectors.toList());
-    }
-
-    public List<RecommendedHeritage> recommendByRegion(Long tripId) {
-        List<Heritage> visited = heritageMapper.findVisitedByTripId(tripId);
-        if (visited.isEmpty()) return List.of();
-
-        Set<Long> visitedIds = visited.stream().map(Heritage::getId).collect(Collectors.toSet());
-        Set<String> visitedCtcds = visited.stream()
-                .map(Heritage::getCcbaCtcd)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        List<Float> avgVector = computeAverageEmbedding(visitedIds);
-        if (avgVector == null) return List.of();
-
-        return knnSearch(avgVector, 100).stream()
-                .filter(id -> !visitedIds.contains(id))
-                .filter(id -> {
-                    String ctcd = getField(id, "ccba_ctcd");
-                    return ctcd == null || !visitedCtcds.contains(ctcd);
-                })
-                .map(id -> buildRecommended(id, 0, 0))
-                .filter(Objects::nonNull)
                 .limit(5)
                 .collect(Collectors.toList());
     }
