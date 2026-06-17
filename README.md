@@ -11,7 +11,7 @@
 | Language | Java 21 |
 | Framework | Spring Boot 3.5.1 |
 | ORM | MyBatis |
-| DB | MySQL 8.x (`heritage_trip`) |
+| DB | MySQL 8.x (`histour`) |
 | Cache | Redis (Refresh Token 전용) |
 | Security | Spring Security + JWT (jjwt 0.12.3) |
 | AI | GMS API (OpenAI 호환 gpt-4o / Anthropic 호환 claude-haiku) |
@@ -28,7 +28,7 @@ src/main/java/com/histour/
 ├── api/controller/
 │   ├── HeritageController.java   # 문화재 해설 API (구현 완료)
 │   ├── UserController.java       # 회원가입/조회 (구현 완료)
-│   ├── TripController.java       # 여행 관리 (미구현)
+│   ├── TripController.java       # 여행 관리 (구현 완료)
 │   ├── QuizController.java       # 퀴즈 (미구현)
 │   └── ReportController.java     # 리포트 (미구현)
 ├── batch/
@@ -37,10 +37,17 @@ src/main/java/com/histour/
 │   ├── GmsAiClient.java          # GMS AI 호출 (gpt-4o + Claude Haiku)
 │   └── HeritageApiClient.java    # 국가유산청 Open API 클라이언트
 ├── config/
-│   ├── SecurityConfig.java       # 임시 전체 permitAll, STATELESS
+│   ├── SecurityConfig.java       # JWT 필터, /api/auth/** · /api/user(POST) · swagger 제외 인증 필요
 │   ├── RedisConfig.java
 │   ├── WebConfig.java            # CORS
 │   └── SwaggerConfig.java
+├── domain/
+│   ├── auth/                     # JWT 로그인/갱신/로그아웃 (구현 완료)
+│   ├── heritage/                 # 문화재 도메인 (구현 완료)
+│   ├── trip/                     # 여행·방문기록 도메인 (구현 완료)
+│   ├── user/                     # 사용자 도메인 (구현 완료)
+│   ├── quiz/                     # 퀴즈 (미구현)
+│   └── report/                   # 리포트 (미구현)
 └── common/
     ├── exception/GlobalExceptionHandler.java
     └── response/ApiResponse.java  # { success, data, message }
@@ -63,7 +70,7 @@ src/main/java/com/histour/
 ### DB 생성
 
 ```sql
-CREATE DATABASE heritage_trip CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE histour CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 이후 `src/main/resources/ddl.sql`을 실행하여 테이블을 생성합니다.
@@ -104,19 +111,26 @@ heritage:
 
 | Method | URL | 설명 |
 |---|---|---|
+| POST | `/api/auth/login` | 로그인 → Access/Refresh Token 발급 |
+| POST | `/api/auth/refresh` | Access Token 갱신 |
+| POST | `/api/auth/logout` | 로그아웃 (Refresh Token 폐기) |
 | POST | `/api/user` | 회원가입 |
-| GET | `/api/user/{userId}` | 사용자 조회 |
+| GET | `/api/user/me` | 내 정보 조회 |
 | POST | `/api/heritage/explain` | 사진 + 위치 → 문화재 식별 + AI 해설 |
 | GET | `/api/heritage/{heritageId}/explain/deeper` | 심화 해설 (visitLogId 필수) |
+| GET | `/api/trip` | 내 여행 목록 (최신순, visitCount 포함) |
+| POST | `/api/trip` | 여행 생성 (IN_PROGRESS 여행 중복 불가) |
+| GET | `/api/trip/{tripId}` | 여행 상세 + 방문 기록 목록 |
+| PATCH | `/api/trip/{tripId}/complete` | 여행 완료 처리 |
 
 ### 미구현
 
 | Method | URL | 설명 |
 |---|---|---|
-| GET/POST | `/api/trip` | 여행 목록 조회 / 생성 |
+| GET | `/api/trip/{tripId}/recommend/next` | 진행 중 다음 문화재 추천 |
 | GET | `/api/quiz/generate` | 여행 기반 퀴즈 생성 |
 | POST | `/api/quiz/result` | 퀴즈 결과 저장 |
-| GET | `/api/report/{tripId}` | 여행 리포트 조회 |
+| GET | `/api/report/{tripId}` | 여행 리포트 + 완료 후 추천 |
 
 ---
 
@@ -169,6 +183,72 @@ heritage:
 
 ---
 
+### Trip API 상세
+
+**여행 생성** `POST /api/trip`
+
+```json
+// Request
+{ "title": "경복궁 탐방", "tripDate": "2026-06-17" }
+
+// Response  201 Created
+{ "success": true, "data": 1 }
+```
+
+- `title`, `tripDate` 모두 nullable
+- 이미 IN_PROGRESS 여행이 있으면 `400` 반환
+
+**내 여행 목록** `GET /api/trip`
+
+```json
+// Response
+{
+  "success": true,
+  "data": [
+    {
+      "tripId": 1,
+      "title": "경복궁 탐방",
+      "tripDate": "2026-06-17",
+      "status": "IN_PROGRESS",
+      "createdAt": "2026-06-17T10:00:00",
+      "visitCount": 3
+    }
+  ]
+}
+```
+
+**여행 상세** `GET /api/trip/{tripId}`
+
+```json
+// Response
+{
+  "success": true,
+  "data": {
+    "tripId": 1,
+    "title": "경복궁 탐방",
+    "status": "COMPLETED",
+    "visitCount": 2,
+    "visitLogs": [
+      {
+        "id": 5,
+        "heritageId": 1,
+        "heritageName": "경복궁",
+        "explanation": "지금 당신이 서 있는 이 곳에서는...",
+        "visitedAt": "2026-06-17T11:30:00"
+      }
+    ]
+  }
+}
+```
+
+- 본인 여행이 아니면 `400` 반환
+
+**여행 완료** `PATCH /api/trip/{tripId}/complete`
+
+- 이미 COMPLETED 상태면 `400` 반환
+
+---
+
 ## 공통 응답 형식
 
 ```json
@@ -182,6 +262,9 @@ heritage:
 | HTTP 상태 | 상황 |
 |---|---|
 | 200 | 정상 처리 |
-| 400 | 요청 오류 (식별 불가, 기본 해설 없음 등) |
+| 201 | 리소스 생성 완료 (여행 생성 등) |
+| 400 | 요청 오류 (문화재 식별 불가, 기본 해설 없음, 중복 여행, 권한 없음 등) |
+| 401 | 인증 실패 (토큰 없음 또는 만료) |
 | 404 | 리소스 없음 (반경 내 문화재 없음, ID 미존재 등) |
+| 502 | GMS AI API 호출 실패 |
 | 500 | 서버 내부 오류 |

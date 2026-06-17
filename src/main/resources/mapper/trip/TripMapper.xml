@@ -3,6 +3,36 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.histour.domain.trip.TripMapper">
 
+    <insert id="insertTrip" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO trips (user_id, title, trip_date, status, created_at)
+        VALUES (#{userId}, #{title}, #{tripDate}, 'IN_PROGRESS', NOW())
+    </insert>
+
+    <select id="findTripById" resultType="com.histour.domain.trip.Trip">
+        SELECT id, user_id, title, trip_date, status, created_at
+        FROM trips
+        WHERE id = #{id}
+    </select>
+
+    <select id="findTripsByUserId" resultType="com.histour.domain.trip.Trip">
+        SELECT t.id, t.user_id, t.title, t.trip_date, t.status, t.created_at,
+               COUNT(v.id) AS visit_count
+        FROM trips t
+        LEFT JOIN visit_logs v ON t.id = v.trip_id
+        WHERE t.user_id = #{userId}
+        GROUP BY t.id
+        ORDER BY t.created_at DESC
+    </select>
+
+    <select id="countInProgressByUserId" resultType="int">
+        SELECT COUNT(*) FROM trips
+        WHERE user_id = #{userId} AND status = 'IN_PROGRESS'
+    </select>
+
+    <update id="updateTripStatus">
+        UPDATE trips SET status = #{status} WHERE id = #{id}
+    </update>
+
     <insert id="insertVisitLog" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO visit_logs (trip_id, heritage_id, photo_url, location, explanation, visited_at)
         VALUES (
@@ -16,6 +46,17 @@
         SELECT id, trip_id, heritage_id, explanation
         FROM visit_logs
         WHERE id = #{id}
+    </select>
+
+    <select id="findVisitLogsByTripId" resultType="com.histour.domain.trip.VisitLog">
+        SELECT v.id, v.trip_id, v.heritage_id, h.name AS heritage_name,
+               v.photo_url,
+               ST_Latitude(v.location) AS lat, ST_Longitude(v.location) AS lng,
+               v.explanation, v.visited_at
+        FROM visit_logs v
+        JOIN heritage h ON v.heritage_id = h.id
+        WHERE v.trip_id = #{tripId}
+        ORDER BY v.visited_at
     </select>
 
 </mapper>
