@@ -61,6 +61,7 @@
         WHERE heritage_id = #{heritageId}
           AND source = 'AI_GENERATED'
           AND depth_level = #{depthLevel}
+          AND topic = #{topic}
         ORDER BY id DESC
         LIMIT 1
     </select>

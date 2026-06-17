@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.histour.common.exception.GmsApiException;
+import com.histour.domain.heritage.dto.ExplainTopic;
 import com.histour.domain.heritage.entity.Heritage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,6 +38,43 @@ public class GmsAiClient {
     private static final int MAX_DIM = 512;
     private static final float JPEG_QUALITY = 0.7f;
     private static final int DESC_LIMIT = 800;
+
+    private static final Map<ExplainTopic, String> TOPIC_PROMPTS = Map.of(
+            ExplainTopic.STORY,
+            """
+            이 문화재에 얽힌 잘 알려지지 않은 비화나 일화를 중심으로 해설하세요.
+            역사 교과서나 일반 안내서에 나오지 않는 흥미로운 이야기를 발굴해주세요.
+            출처가 불분명한 이야기는 "전해지기로는", "~라는 기록이 있습니다" 같은 표현으로 구분하세요.
+            최소 600자.""",
+
+            ExplainTopic.PERSON,
+            """
+            이 문화재와 가장 깊이 연관된 실존 인물에 집중해서 해설하세요.
+            그 인물의 삶, 내면의 갈등, 결단의 순간, 그리고 이 장소와의 인연을 생생하게 그려주세요.
+            단순한 인물 소개가 아니라 이 문화재와의 관계를 통해 그 인물을 입체적으로 보여주세요.
+            최소 600자.""",
+
+            ExplainTopic.ARCHITECTURE,
+            """
+            지금 방문객이 눈앞에서 볼 수 있는 건축적·예술적 특징을 전문가 시각으로 해설하세요.
+            일반 방문객이 그냥 지나쳤을 디테일, 당대 최고 기술의 흔적, 상징적 의미를 담은 구조물에 집중하세요.
+            현장에서 실제로 보면서 이해할 수 있도록 구체적이고 생생하게 서술하세요.
+            최소 600자.""",
+
+            ExplainTopic.CONTEXT,
+            """
+            이 문화재가 만들어진 시대의 정치·사회·문화적 배경을 깊이 파고들어 해설하세요.
+            당시의 권력 구조, 사회 분위기, 이 문화재가 그 시대에 가졌던 의미를 설명하고,
+            역사의 흐름 속에서 이 장소가 어떤 위치를 차지했는지 보여주세요.
+            최소 600자.""",
+
+            ExplainTopic.MODERN,
+            """
+            이 문화재가 오늘날 한국 사회와 문화에 미치는 영향을 이야기해주세요.
+            현대에 재발견된 가치, 관련 논쟁이나 연구, 대중문화 속 영향,
+            혹은 방문객이 이 장소에서 현대의 시각으로 느낄 수 있는 것들을 다뤄주세요.
+            최소 600자."""
+    );
 
     private static final Map<String, String> PERIOD_NAMES = Map.ofEntries(
             Map.entry("PREHISTORIC", "선사시대"),
@@ -233,9 +271,9 @@ public class GmsAiClient {
         return node;
     }
 
-    public String generateDeeperExplanation(Heritage heritage, String existingExplanation) {
+    public String generateDeeperExplanation(Heritage heritage, String existingExplanation, ExplainTopic topic) {
         String periodKo = PERIOD_NAMES.getOrDefault(heritage.getPeriod(), heritage.getPeriod());
-        String requestBody = buildDeeperRequestBody(heritage, periodKo, existingExplanation);
+        String requestBody = buildDeeperRequestBody(heritage, periodKo, existingExplanation, topic);
 
         log.info("[GMS 심화해설 요청] {} (Claude Haiku)", heritage.getName());
 
@@ -270,7 +308,7 @@ public class GmsAiClient {
         }
     }
 
-    private String buildDeeperRequestBody(Heritage heritage, String periodKo, String existingExplanation) {
+    private String buildDeeperRequestBody(Heritage heritage, String periodKo, String existingExplanation, ExplainTopic topic) {
         try {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", "claude-haiku-4-5-20251001");
@@ -288,15 +326,21 @@ public class GmsAiClient {
             }
             sb.append(" — ").append(heritage.getCategory()).append(" · ").append(periodKo).append("\n\n");
             sb.append("방문객이 이미 들은 기본 해설:\n").append(existingExplanation).append("\n\n");
-            sb.append("""
-                    위 기본 해설을 이미 들은 방문객에게 심화 해설을 들려주세요.
-                    다음 중 하나 이상을 반드시 포함하세요:
-                    1. 잘 알려지지 않은 비화나 일화
-                    2. 이 문화재와 연관된 다른 역사적 사건이나 인물
-                    3. 전문가 시각에서 본 건축·예술적 특징의 세부 사항
-                    4. 이 장소가 현대에 갖는 의미나 영향
-                    최소 500자. 반드시 아래 JSON 형식으로만 응답하세요:
-                    {"explanation": "<심화 해설>"}""");
+
+            if (topic != null) {
+                sb.append("방문객이 선택한 심화 주제: [").append(topicLabel(topic)).append("]\n\n");
+                sb.append(TOPIC_PROMPTS.get(topic));
+            } else {
+                sb.append("""
+                        위 기본 해설을 이미 들은 방문객에게 심화 해설을 들려주세요.
+                        아래 4가지를 모두 포함하세요:
+                        1. 잘 알려지지 않은 비화나 일화
+                        2. 이 문화재와 연관된 다른 역사적 사건이나 인물
+                        3. 전문가 시각에서 본 건축·예술적 특징의 세부 사항
+                        4. 이 장소가 현대에 갖는 의미나 영향
+                        최소 600자.""");
+            }
+            sb.append("\n반드시 아래 JSON 형식으로만 응답하세요:\n{\"explanation\": \"<심화 해설>\"}");
 
             ArrayNode messages = objectMapper.createArrayNode();
             ObjectNode userMsg = objectMapper.createObjectNode();
@@ -424,6 +468,16 @@ public class GmsAiClient {
         } catch (Exception e) {
             throw new GmsApiException("여행 요약 생성 실패", e);
         }
+    }
+
+    private String topicLabel(ExplainTopic topic) {
+        return switch (topic) {
+            case STORY -> "비화·일화";
+            case PERSON -> "핵심 인물";
+            case ARCHITECTURE -> "건축·예술 디테일";
+            case CONTEXT -> "시대적 배경";
+            case MODERN -> "현대적 의미";
+        };
     }
 
     private String extractJson(String content) {

@@ -4,6 +4,7 @@ import com.histour.client.GmsAiClient;
 import com.histour.common.RateLimitService;
 import com.histour.domain.heritage.dto.ExplainRequest;
 import com.histour.domain.heritage.dto.ExplainResponse;
+import com.histour.domain.heritage.dto.ExplainTopic;
 import com.histour.domain.heritage.dto.HeritageDetailResponse;
 import com.histour.domain.heritage.entity.HeritageMedia;
 import com.histour.domain.heritage.entity.Heritage;
@@ -113,7 +114,7 @@ public class HeritageService {
         );
     }
 
-    public ExplainResponse explainDeeper(Long heritageId, Long visitLogId) {
+    public ExplainResponse explainDeeper(Long heritageId, Long visitLogId, ExplainTopic topic) {
         Heritage heritage = heritageMapper.findById(heritageId);
         if (heritage == null) {
             throw new NoSuchElementException("문화재를 찾을 수 없습니다.");
@@ -125,21 +126,24 @@ public class HeritageService {
             throw new IllegalStateException("기본 해설이 없습니다. 먼저 해설을 요청하세요.");
         }
 
-        // level 2 캐시 확인
-        HeritageDescription cached = heritageMapper.findAiDescription(heritageId, 2);
+        // topic을 캐시 키로 사용 (null이면 종합 해설)
+        String topicKey = topic != null ? topic.name() : "AI 심화 해설";
+
+        // 캐시 확인
+        HeritageDescription cached = heritageMapper.findAiDescription(heritageId, 2, topicKey);
         if (cached != null) {
             return new ExplainResponse(heritageId, heritage.getName(), cached.getContent(), null);
         }
 
         // 심화 해설 생성
-        String deeperContent = gmsAiClient.generateDeeperExplanation(heritage, visitLog.getExplanation());
+        String deeperContent = gmsAiClient.generateDeeperExplanation(heritage, visitLog.getExplanation(), topic);
 
         // 심화 해설 저장
         heritageMapper.insertDescription(HeritageDescription.builder()
                 .heritageId(heritageId)
                 .content(deeperContent)
                 .depthLevel(2)
-                .topic("AI 심화 해설")
+                .topic(topicKey)
                 .source("AI_GENERATED")
                 .build());
 

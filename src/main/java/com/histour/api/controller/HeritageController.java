@@ -3,6 +3,7 @@ package com.histour.api.controller;
 import com.histour.common.response.ApiResponse;
 import com.histour.domain.heritage.dto.ExplainRequest;
 import com.histour.domain.heritage.dto.ExplainResponse;
+import com.histour.domain.heritage.dto.ExplainTopic;
 import com.histour.domain.heritage.dto.HeritageDetailResponse;
 import com.histour.domain.heritage.service.HeritageService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -59,8 +60,10 @@ public class HeritageController {
     @GetMapping("/{heritageId}/explain/deeper")
     public ApiResponse<ExplainResponse> explainDeeper(
             @Parameter(description = "문화재 ID", example = "1") @PathVariable Long heritageId,
-            @Parameter(description = "/explain 응답에서 받은 visitLogId", example = "5", required = true) @RequestParam Long visitLogId) {
-        return ApiResponse.ok(heritageService.explainDeeper(heritageId, visitLogId));
+            @Parameter(description = "/explain 응답에서 받은 visitLogId", example = "5", required = true) @RequestParam Long visitLogId,
+            @Parameter(description = "심화 해설 주제 (STORY·PERSON·ARCHITECTURE·CONTEXT·MODERN), 미지정 시 종합 해설")
+                @RequestParam(required = false) ExplainTopic topic) {
+        return ApiResponse.ok(heritageService.explainDeeper(heritageId, visitLogId, topic));
     }
 
 }
