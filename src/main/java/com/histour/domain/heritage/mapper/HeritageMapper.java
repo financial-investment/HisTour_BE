@@ -17,6 +17,8 @@ public interface HeritageMapper {
     void insertDescription(HeritageDescription description);
     Heritage findById(@Param("id") Long id);
     List<Heritage> findNearby(@Param("lat") double lat, @Param("lng") double lng);
+    List<Heritage> findAllForEmbedding();
+    List<Heritage> findVisitedByTripId(@Param("tripId") Long tripId);
     List<HeritageDescription> findDescriptions(@Param("heritageId") Long heritageId);
     List<HeritageMedia> findMedia(@Param("heritageId") Long heritageId);
     HeritageDescription findAiDescription(@Param("heritageId") Long heritageId, @Param("depthLevel") int depthLevel);

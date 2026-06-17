@@ -1,21 +1,33 @@
 package com.histour.domain.heritage.service;
 
 import com.histour.client.GmsAiClient;
+import com.histour.common.RateLimitService;
 import com.histour.domain.heritage.dto.ExplainRequest;
 import com.histour.domain.heritage.dto.ExplainResponse;
+import com.histour.domain.heritage.dto.HeritageDetailResponse;
+import com.histour.domain.heritage.entity.HeritageMedia;
 import com.histour.domain.heritage.entity.Heritage;
 import com.histour.domain.heritage.entity.HeritageDescription;
 import com.histour.domain.heritage.mapper.HeritageMapper;
 import com.histour.domain.trip.TripMapper;
 import com.histour.domain.trip.VisitLog;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class HeritageService {
@@ -23,8 +35,17 @@ public class HeritageService {
     private final HeritageMapper heritageMapper;
     private final TripMapper tripMapper;
     private final GmsAiClient gmsAiClient;
+    private final RateLimitService rateLimitService;
 
-    public ExplainResponse explain(ExplainRequest request) {
+    @Value("${upload.dir}")
+    private String uploadDir;
+
+    @Value("${upload.base-url}")
+    private String uploadBaseUrl;
+
+    public ExplainResponse explain(ExplainRequest request, Long userId) {
+        rateLimitService.checkExplain(userId);
+
         // 1. 반경 500m 문화재 조회
         List<Heritage> candidates = heritageMapper.findNearby(request.lat(), request.lng());
         if (candidates.isEmpty()) {
@@ -54,9 +75,11 @@ public class HeritageService {
         // 4. visit_logs 저장
         Long visitLogId = null;
         if (request.tripId() != null) {
+            String photoUrl = savePhoto(request.image());
             VisitLog visitLog = VisitLog.builder()
                     .tripId(request.tripId())
                     .heritageId(identified.getId())
+                    .photoUrl(photoUrl)
                     .lat(request.lat())
                     .lng(request.lng())
                     .explanation(result.explanation())
@@ -66,6 +89,28 @@ public class HeritageService {
         }
 
         return new ExplainResponse(identified.getId(), identified.getName(), result.explanation(), visitLogId);
+    }
+
+    public HeritageDetailResponse getDetail(Long heritageId) {
+        Heritage heritage = heritageMapper.findById(heritageId);
+        if (heritage == null) throw new NoSuchElementException("문화재를 찾을 수 없습니다.");
+
+        String description = heritageMapper.findDescriptions(heritageId).stream()
+                .filter(d -> "OFFICIAL".equals(d.getSource()))
+                .findFirst()
+                .map(HeritageDescription::getContent)
+                .orElse(null);
+
+        List<String> mediaUrls = heritageMapper.findMedia(heritageId).stream()
+                .map(HeritageMedia::getUrl)
+                .toList();
+
+        return new HeritageDetailResponse(
+                heritage.getId(), heritage.getName(), heritage.getNameHanja(),
+                heritage.getCategory(), heritage.getPeriod(),
+                heritage.getLat(), heritage.getLng(), heritage.getThumbnailUrl(),
+                description, mediaUrls
+        );
     }
 
     public ExplainResponse explainDeeper(Long heritageId, Long visitLogId) {
@@ -99,5 +144,24 @@ public class HeritageService {
                 .build());
 
         return new ExplainResponse(heritageId, heritage.getName(), deeperContent, null);
+    }
+
+    private String savePhoto(String base64Image) {
+        try {
+            // data:image/jpeg;base64,... 프리픽스 제거
+            String data = base64Image.contains(",") ? base64Image.split(",", 2)[1] : base64Image;
+            byte[] bytes = Base64.getDecoder().decode(data);
+
+            Path dir = Paths.get(uploadDir).toAbsolutePath();
+            Files.createDirectories(dir);
+
+            String filename = UUID.randomUUID() + ".jpg";
+            Files.write(dir.resolve(filename), bytes);
+
+            return uploadBaseUrl + "/" + filename;
+        } catch (IOException e) {
+            log.warn("[HeritageService] 사진 저장 실패: {}", e.getMessage());
+            return null;
+        }
     }
 }

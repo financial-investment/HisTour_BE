@@ -3,6 +3,7 @@ package com.histour.api.controller;
 import com.histour.common.response.ApiResponse;
 import com.histour.domain.heritage.dto.ExplainRequest;
 import com.histour.domain.heritage.dto.ExplainResponse;
+import com.histour.domain.heritage.dto.HeritageDetailResponse;
 import com.histour.domain.heritage.service.HeritageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Heritage", description = "문화재 해설 API")
@@ -19,6 +21,13 @@ import org.springframework.web.bind.annotation.*;
 public class HeritageController {
 
     private final HeritageService heritageService;
+
+    @Operation(summary = "문화재 상세 조회", description = "문화재 기본 정보, 공식 설명, 사진 목록을 반환합니다.")
+    @GetMapping("/{heritageId}")
+    public ApiResponse<HeritageDetailResponse> getDetail(
+            @Parameter(description = "문화재 ID", example = "210") @PathVariable Long heritageId) {
+        return ApiResponse.ok(heritageService.getDetail(heritageId));
+    }
 
     @Operation(
         summary = "문화재 기본 해설",
@@ -31,8 +40,10 @@ public class HeritageController {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "사진에서 주변 문화재를 식별할 수 없음")
     })
     @PostMapping("/explain")
-    public ApiResponse<ExplainResponse> explain(@RequestBody @Valid ExplainRequest request) {
-        return ApiResponse.ok(heritageService.explain(request));
+    public ApiResponse<ExplainResponse> explain(@RequestBody @Valid ExplainRequest request,
+                                                Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(heritageService.explain(request, userId));
     }
 
     @Operation(
