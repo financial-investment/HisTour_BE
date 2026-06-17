@@ -12,11 +12,12 @@
 | Framework | Spring Boot 3.5.1 |
 | ORM | MyBatis |
 | DB | MySQL 8.x (`histour`) |
-| Cache | Redis (Refresh Token 전용) |
+| Cache / Vector | Redis Stack (Refresh Token + KNN 벡터 검색) |
 | Security | Spring Security + JWT (jjwt 0.12.3) |
-| AI | GMS API (OpenAI 호환 gpt-4o / Anthropic 호환 claude-haiku) |
+| AI | GMS API (OpenAI 호환 gpt-4o / Anthropic 호환 claude-haiku / text-embedding-3-small) |
 | Docs | SpringDoc OpenAPI 2.x (Swagger UI) |
 | Build | Maven |
+| 인프라 | Docker Compose (MySQL + Redis Stack) |
 
 ---
 
@@ -28,18 +29,19 @@ src/main/java/com/histour/
 ├── api/controller/
 │   ├── HeritageController.java   # 문화재 해설 API (구현 완료)
 │   ├── UserController.java       # 회원가입/조회 (구현 완료)
-│   ├── TripController.java       # 여행 관리 (구현 완료)
+│   ├── TripController.java       # 여행 관리 + 추천 (구현 완료)
 │   ├── QuizController.java       # 여행 후 퀴즈 생성/채점 (구현 완료)
-│   └── ReportController.java     # 리포트 (미구현)
+│   └── ReportController.java     # 리포트 (구현 완료)
 ├── batch/
-│   └── HeritageDataLoader.java   # 국가유산청 데이터 1회성 적재 (enabled: false)
+│   ├── HeritageDataLoader.java   # 국가유산청 데이터 1회성 적재 (enabled: false)
+│   └── EmbeddingLoader.java      # heritage 전체 임베딩 → Redis Stack 적재 (enabled: false)
 ├── client/
-│   ├── GmsAiClient.java          # GMS AI 호출 (gpt-4o + Claude Haiku)
+│   ├── GmsAiClient.java          # GMS AI 호출 (gpt-4o + Claude Haiku + Embeddings)
 │   ├── QuizAiClient.java         # 퀴즈 생성용 GMS Claude 호출
 │   └── HeritageApiClient.java    # 국가유산청 Open API 클라이언트
 ├── config/
 │   ├── SecurityConfig.java       # JWT 필터, /api/auth/** · /api/user(POST) · swagger 제외 인증 필요
-│   ├── RedisConfig.java
+│   ├── RedisConfig.java          # StringRedisTemplate + JedisPooled 빈 등록
 │   ├── WebConfig.java            # CORS
 │   └── SwaggerConfig.java
 ├── domain/
@@ -48,7 +50,7 @@ src/main/java/com/histour/
 │   ├── trip/                     # 여행·방문기록 도메인 (구현 완료)
 │   ├── user/                     # 사용자 도메인 (구현 완료)
 │   ├── quiz/                     # 여행 후 퀴즈 도메인 (구현 완료)
-│   └── report/                   # 리포트 (미구현)
+│   └── report/                   # 추천·리포트 도메인 (구현 완료)
 └── common/
     ├── exception/GlobalExceptionHandler.java
     └── response/ApiResponse.java  # { success, data, message }
@@ -68,7 +70,19 @@ src/main/java/com/histour/
 | `JWT_SECRET` | JWT 서명 키 (256bit 이상) | 로컬 개발용 기본값 있음 |
 | `GMS_API_KEY` | SSAFY GMS API 키 | (없음, 필수) |
 
-### DB 생성
+### Docker Compose로 로컬 환경 실행 (권장)
+
+Redis Stack(벡터 검색 모듈 포함)이 필요하므로 일반 Redis는 사용 불가합니다.
+
+```bash
+# MySQL + Redis Stack 컨테이너 실행
+DB_PASSWORD=1234 docker compose up -d
+
+# 종료
+docker compose down
+```
+
+### DB 초기화
 
 ```sql
 CREATE DATABASE histour CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -78,7 +92,7 @@ CREATE DATABASE histour CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ### 문화재 데이터 적재
 
-국가유산청 Open API에서 데이터를 받아 적재하는 1회성 로더가 포함되어 있습니다.
+국가유산청 Open API에서 데이터를 받아 적재하는 1회성 로더입니다.
 
 ```yaml
 # application.yaml
@@ -87,7 +101,17 @@ heritage:
     enabled: true   # 적재 후 반드시 false로 되돌릴 것
 ```
 
-`enabled: true`로 변경 후 앱을 실행하면 자동 적재됩니다.
+### 임베딩 배치 실행
+
+추천·리포트 API 사용 전 heritage 전체 임베딩을 Redis Stack에 적재해야 합니다.
+8,314건 기준 약 50분 소요 (GMS API text-embedding-3-small, ~9 크레딧).
+
+```yaml
+# application.yaml
+embedding:
+  loader:
+    enabled: true   # 적재 후 반드시 false로 되돌릴 것
+```
 
 ---
 
@@ -98,7 +122,7 @@ heritage:
 ./mvnw clean install -DskipTests
 
 # 실행
-./mvnw spring-boot:run
+GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
 ```
 
 - 서버 기본 포트: `http://localhost:8080`
@@ -124,6 +148,8 @@ heritage:
 | POST | `/api/trip` | 여행 생성 (IN_PROGRESS 여행 중복 불가) |
 | GET | `/api/trip/{tripId}` | 여행 상세 + 방문 기록 목록 |
 | PATCH | `/api/trip/{tripId}/complete` | 여행 완료 처리 |
+| GET | `/api/trip/{tripId}/recommend/next` | 진행 중 다음 문화재 추천 (KNN) |
+| GET | `/api/report/{tripId}` | 여행 리포트 + 완료 후 추천 |
 | POST | `/api/quiz/sessions` | 여행 방문 기록 기반 퀴즈 10개 생성/조회 |
 | GET | `/api/quiz/sessions?tripId={tripId}` | 생성된 퀴즈 세션 조회 |
 | POST | `/api/quiz/results` | 퀴즈 답안 제출 및 채점 결과 저장 |
@@ -132,8 +158,7 @@ heritage:
 
 | Method | URL | 설명 |
 |---|---|---|
-| GET | `/api/trip/{tripId}/recommend/next` | 진행 중 다음 문화재 추천 |
-| GET | `/api/report/{tripId}` | 여행 리포트 + 완료 후 추천 |
+| - | - | 모든 API 구현 완료 |
 
 ---
 
@@ -342,6 +367,72 @@ heritage:
 - `choiceId`가 해당 문제의 선택지인지 검증합니다.
 - 이미 제출된 세션은 중복 제출할 수 없습니다.
 - 채점 결과는 `quiz_results`에 저장하고, `quiz_sessions.status`를 `SUBMITTED`로 변경합니다.
+
+---
+
+### 추천 API 상세
+
+**진행 중 추천** `GET /api/trip/{tripId}/recommend/next`
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `lat` | double | Y | 현재 위도 |
+| `lng` | double | Y | 현재 경도 |
+| `radiusKm` | double | N | 탐색 반경 km (기본값: 5) |
+
+```json
+// Response
+{
+  "success": true,
+  "data": [
+    {
+      "heritageId": 42,
+      "name": "종묘",
+      "thumbnailUrl": null,
+      "lat": 37.5751,
+      "lng": 126.9946,
+      "distanceM": 1230
+    }
+  ]
+}
+```
+
+- 현재 방문 문화재 임베딩 평균 벡터로 KNN 검색 → 반경 내 미방문 문화재 최대 5개 반환
+- 임베딩 배치 적재 완료 후 사용 가능
+
+---
+
+### 리포트 API 상세
+
+**여행 리포트** `GET /api/report/{tripId}`
+
+```json
+// Response
+{
+  "success": true,
+  "data": {
+    "tripId": 1,
+    "visitedHeritages": [
+      { "heritageId": 1, "name": "창덕궁", "thumbnailUrl": "https://..." }
+    ],
+    "recommendedHeritages": [
+      {
+        "heritageId": 200,
+        "name": "불국사",
+        "thumbnailUrl": null,
+        "lat": 35.7896,
+        "lng": 129.3318,
+        "distanceM": 0
+      }
+    ],
+    "summary": "조선 시대 궁궐을 중심으로 탐방하셨네요..."
+  }
+}
+```
+
+- 방문 문화재 기반 KNN → 다른 지역(시/도) 문화재 최대 5개 추천
+- GPT-4o로 여행 요약 생성
+- 임베딩 배치 적재 완료 후 사용 가능
 
 ---
 
