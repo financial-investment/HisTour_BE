@@ -1,23 +1,21 @@
-package com.histour.domain.trip;
+package com.histour.domain.trip.dto;
 
-import lombok.AllArgsConstructor;
+import com.histour.domain.trip.VisitLog;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
 @Builder
-public class Trip {
-    private Long id;
-    private Long userId;
+public class TripResponse {
+    private Long tripId;
     private String title;
     private LocalDate tripDate;
     private String status;
     private LocalDateTime createdAt;
     private int visitCount;
+    private List<VisitLog> visitLogs;
 }
