@@ -6,6 +6,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.histour.common.exception.ForbiddenException;
+
+import java.time.LocalDate;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -28,10 +31,13 @@ public class TripService {
         if (tripMapper.countInProgressByUserId(userId) > 0) {
             throw new IllegalStateException("이미 진행 중인 여행이 있습니다.");
         }
+        LocalDate today = LocalDate.now();
         Trip trip = Trip.builder()
                 .userId(userId)
-                .title(request.title())
-                .tripDate(request.tripDate())
+                .title(request.title() != null && !request.title().isBlank()
+                        ? request.title()
+                        : today + " 역사 여행")
+                .tripDate(request.tripDate() != null ? request.tripDate() : today)
                 .build();
         tripMapper.insertTrip(trip);
         return trip.getId();
@@ -59,7 +65,7 @@ public class TripService {
             throw new NoSuchElementException("여행을 찾을 수 없습니다.");
         }
         if (!trip.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("접근 권한이 없습니다.");
+            throw new ForbiddenException("접근 권한이 없습니다.");
         }
         return trip;
     }
