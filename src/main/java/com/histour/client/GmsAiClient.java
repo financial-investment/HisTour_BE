@@ -107,36 +107,164 @@ public class GmsAiClient {
     @Value("${gms.api.key}")
     private String apiKey;
 
-    public record ExplainResult(int heritageIndex, String explanation) {}
-
-    public ExplainResult explainHeritage(String base64Image,
-                                          List<Heritage> candidates,
-                                          Map<Long, String> descriptions) {
+    public int classifyHeritage(String base64Image, List<Heritage> candidates) {
         String compressedBase64 = compressImage(base64Image);
         String imageDataUrl = "data:image/jpeg;base64," + compressedBase64;
-        String requestBody = buildRequestBody("gpt-4o", imageDataUrl, candidates, descriptions);
-
-        log.info("[GMS 요청] 총 body 크기: {} bytes", requestBody.getBytes(StandardCharsets.UTF_8).length);
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(apiUrl))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .timeout(Duration.ofSeconds(60))
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
-                .build();
 
         try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("model", "gpt-4o");
+            body.put("max_tokens", 50);
+
+            ArrayNode messages = objectMapper.createArrayNode();
+
+            ObjectNode systemMsg = objectMapper.createObjectNode();
+            systemMsg.put("role", "system");
+            systemMsg.put("content", "사진과 주변 문화재 목록을 보고 사진 속 문화재의 번호를 찾아주세요. 반드시 JSON 형식으로만 응답하세요.");
+            messages.add(systemMsg);
+
+            StringBuilder sb = new StringBuilder("주변 500m 내 문화재 후보:\n");
+            for (int i = 0; i < candidates.size(); i++) {
+                Heritage h = candidates.get(i);
+                String periodKo = PERIOD_NAMES.getOrDefault(h.getPeriod(), h.getPeriod());
+                sb.append(String.format("[%d] %s", i + 1, h.getName()));
+                if (h.getNameHanja() != null && !h.getNameHanja().isBlank()) {
+                    sb.append(" (").append(h.getNameHanja()).append(")");
+                }
+                sb.append(String.format(" — %s · %s\n", h.getCategory(), periodKo));
+            }
+            sb.append("\n사진 속 문화재가 목록에 있으면 해당 번호를, 없으면 0을 반환하세요.\n");
+            sb.append("{\"heritageIndex\": <번호>}");
+
+            ArrayNode contentArray = objectMapper.createArrayNode();
+            contentArray.add(imageUrlNode(imageDataUrl));
+            contentArray.add(textNode(sb.toString()));
+
+            ObjectNode userMsg = objectMapper.createObjectNode();
+            userMsg.put("role", "user");
+            userMsg.set("content", contentArray);
+            messages.add(userMsg);
+            body.set("messages", messages);
+
+            String requestBody = objectMapper.writeValueAsString(body);
+            log.info("[GMS 분류 요청] 후보 {}개, body {} bytes", candidates.size(), requestBody.getBytes(StandardCharsets.UTF_8).length);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .timeout(Duration.ofSeconds(60))
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                    .build();
+
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
-                log.error("GMS API 오류 [{}]: {}", response.statusCode(), response.body());
+                log.error("GMS 분류 API 오류 [{}]: {}", response.statusCode(), response.body());
                 throw new GmsApiException("GMS API 오류: " + response.statusCode());
             }
-            return parseResponse(response.body());
+
+            JsonNode root = objectMapper.readTree(response.body());
+            String content = root.path("choices").get(0).path("message").path("content").asText();
+            String json = extractJson(content);
+            int index = objectMapper.readTree(json).path("heritageIndex").asInt(0);
+            JsonNode usage = root.path("usage");
+            log.info("[GMS 분류 결과] heritageIndex={} | 토큰: prompt={}, completion={}, total={}",
+                    index, usage.path("prompt_tokens").asInt(), usage.path("completion_tokens").asInt(), usage.path("total_tokens").asInt());
+            return index;
+
         } catch (GmsApiException e) {
             throw e;
         } catch (Exception e) {
-            log.error("GMS API 호출 실패: {}", e.getMessage());
+            log.error("GMS 분류 API 호출 실패: {}", e.getMessage());
+            throw new GmsApiException("문화재 분류에 실패했습니다.", e);
+        }
+    }
+
+    public String generateBasicExplanation(Heritage heritage, String officialDescription) {
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("model", "gpt-4o");
+            body.put("max_tokens", 1500);
+
+            ArrayNode messages = objectMapper.createArrayNode();
+
+            ObjectNode systemMsg = objectMapper.createObjectNode();
+            systemMsg.put("role", "system");
+            systemMsg.put("content",
+                    "당신은 20년 경력의 한국 역사 현장 해설사입니다. " +
+                    "역사 교과서에 없는 생생한 이야기로 방문객을 그 시대 속으로 데려가는 것이 당신의 특기입니다.\n\n" +
+                    "절대 하지 말아야 할 것:\n" +
+                    "- \"이 문화재는 ~년에 지어졌습니다\" 같은 백과사전식 사실 나열\n" +
+                    "- 연도와 명칭만 열거하는 방식\n" +
+                    "- \"~로 알려져 있습니다\", \"~로 불립니다\" 같은 딱딱한 수동 문어체\n" +
+                    "- 도입부를 항상 같은 문장 패턴으로 시작하는 것");
+            messages.add(systemMsg);
+
+            String periodKo = PERIOD_NAMES.getOrDefault(heritage.getPeriod(), heritage.getPeriod());
+            StringBuilder sb = new StringBuilder();
+            sb.append("문화재: ").append(heritage.getName());
+            if (heritage.getNameHanja() != null && !heritage.getNameHanja().isBlank()) {
+                sb.append(" (").append(heritage.getNameHanja()).append(")");
+            }
+            sb.append(String.format(" — %s · %s\n\n", heritage.getCategory(), periodKo));
+
+            if (officialDescription != null && !officialDescription.isBlank()) {
+                String trimmed = officialDescription.length() > DESC_LIMIT
+                        ? officialDescription.substring(0, DESC_LIMIT) + "..."
+                        : officialDescription;
+                sb.append("참고 설명:\n").append(trimmed).append("\n\n");
+            }
+
+            sb.append("""
+                    위 문화재에 대해 현장 방문객을 위한 해설을 작성해주세요.
+                    소제목이나 단계 레이블 없이 하나의 흐르는 이야기로 해설을 작성하세요.
+                    아래 흐름을 자연스럽게 녹여서 써주세요:
+
+                    - 이 장소에서 일어난 가장 극적인 역사적 순간을 현재 시제로 생생하게 묘사하며 시작할 것. 매번 다른 방식으로 시작하세요.
+                    - 이 문화재와 깊이 연관된 실존 인물이나 구체적 사건을 중심으로 이야기를 전개할 것. 그 인물의 감정과 결단을 살려줄 것.
+                    - 당시 사람들이 이 장소를 어떻게 느꼈을지, 시대적 분위기 속 의미를 담을 것.
+                    - 지금 방문객이 눈앞에서 볼 수 있는 특징 하나를 콕 짚어 그 의미를 설명할 것.
+                    - 과거와 현재를 잇는 문장으로 마무리할 것.
+
+                    분량: 700자 이상
+                    반드시 아래 JSON 형식으로만 응답하세요:
+                    {"explanation": "<해설>"}""");
+
+            ObjectNode userMsg = objectMapper.createObjectNode();
+            userMsg.put("role", "user");
+            userMsg.put("content", sb.toString());
+            messages.add(userMsg);
+            body.set("messages", messages);
+
+            String requestBody = objectMapper.writeValueAsString(body);
+            log.info("[GMS 기본해설 요청] {}", heritage.getName());
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .timeout(Duration.ofSeconds(60))
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                log.error("GMS 기본해설 API 오류 [{}]: {}", response.statusCode(), response.body());
+                throw new GmsApiException("GMS API 오류: " + response.statusCode());
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            String content = root.path("choices").get(0).path("message").path("content").asText();
+            JsonNode usage = root.path("usage");
+            log.info("[GMS 기본해설 결과] 토큰: prompt={}, completion={}, total={}",
+                    usage.path("prompt_tokens").asInt(), usage.path("completion_tokens").asInt(), usage.path("total_tokens").asInt());
+            String json = extractJson(content);
+            return objectMapper.readTree(json).path("explanation").asText("");
+
+        } catch (GmsApiException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("GMS 기본해설 API 호출 실패: {}", e.getMessage());
             throw new GmsApiException("AI 해설 생성에 실패했습니다.", e);
         }
     }
@@ -187,78 +315,6 @@ public class GmsAiClient {
         }
     }
 
-    private String buildRequestBody(String model, String imageDataUrl,
-                                    List<Heritage> candidates,
-                                    Map<Long, String> descriptions) {
-        try {
-            ObjectNode body = objectMapper.createObjectNode();
-            body.put("model", model);
-
-            ArrayNode messages = objectMapper.createArrayNode();
-
-            ObjectNode systemMsg = objectMapper.createObjectNode();
-            systemMsg.put("role", "system");
-            systemMsg.put("content",
-                    "당신은 20년 경력의 한국 역사 현장 해설사입니다. " +
-                    "역사 교과서에 없는 생생한 이야기로 방문객을 그 시대 속으로 데려가는 것이 당신의 특기입니다.\n\n" +
-                    "절대 하지 말아야 할 것:\n" +
-                    "- \"이 문화재는 ~년에 지어졌습니다\" 같은 백과사전식 사실 나열\n" +
-                    "- 연도와 명칭만 열거하는 방식\n" +
-                    "- \"~로 알려져 있습니다\", \"~로 불립니다\" 같은 딱딱한 수동 문어체\n" +
-                    "- 도입부를 항상 같은 문장 패턴으로 시작하는 것");
-            messages.add(systemMsg);
-
-            ArrayNode contentArray = objectMapper.createArrayNode();
-            contentArray.add(imageUrlNode(imageDataUrl));
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("주변 500m 내 문화재 후보 목록:\n\n");
-            for (int i = 0; i < candidates.size(); i++) {
-                Heritage h = candidates.get(i);
-                String periodKo = PERIOD_NAMES.getOrDefault(h.getPeriod(), h.getPeriod());
-                sb.append(String.format("[%d] %s", i + 1, h.getName()));
-                if (h.getNameHanja() != null && !h.getNameHanja().isBlank()) {
-                    sb.append(" (").append(h.getNameHanja()).append(")");
-                }
-                sb.append(String.format(" — %s · %s\n", h.getCategory(), periodKo));
-                String desc = descriptions.get(h.getId());
-                if (desc != null && !desc.isBlank()) {
-                    String trimmed = desc.length() > DESC_LIMIT ? desc.substring(0, DESC_LIMIT) + "..." : desc;
-                    sb.append("참고 설명: ").append(trimmed).append("\n");
-                }
-                sb.append("\n");
-            }
-            sb.append("""
-                    위 사진에서 보이는 문화재를 목록에서 찾아 주세요.
-
-                    찾은 문화재에 대해 소제목이나 단계 레이블 없이 하나의 흐르는 이야기로 해설을 작성하세요.
-                    아래 흐름을 자연스럽게 녹여서 써주세요:
-
-                    - 이 장소에서 일어난 가장 극적인 역사적 순간을 현재 시제로 생생하게 묘사하며 시작할 것. 매번 다른 방식으로 시작하세요.
-                    - 이 문화재와 깊이 연관된 실존 인물이나 구체적 사건을 중심으로 이야기를 전개할 것. 그 인물의 감정과 결단을 살려줄 것.
-                    - 당시 사람들이 이 장소를 어떻게 느꼈을지, 시대적 분위기 속 의미를 담을 것.
-                    - 지금 방문객이 눈앞에서 볼 수 있는 특징 하나를 콕 짚어 그 의미를 설명할 것.
-                    - 과거와 현재를 잇는 문장으로 마무리할 것.
-
-                    분량: 700자 이상
-                    일치하는 문화재가 없으면 heritageIndex를 0으로 반환하세요.
-                    반드시 아래 JSON 형식으로만 응답하세요:
-                    {"heritageIndex": <번호>, "explanation": "<해설>"}""");
-            contentArray.add(textNode(sb.toString()));
-
-            ObjectNode userMsg = objectMapper.createObjectNode();
-            userMsg.put("role", "user");
-            userMsg.set("content", contentArray);
-            messages.add(userMsg);
-
-            body.set("messages", messages);
-            body.put("max_tokens", 1500);
-
-            return objectMapper.writeValueAsString(body);
-        } catch (Exception e) {
-            throw new RuntimeException("요청 직렬화 실패", e);
-        }
-    }
 
     private ObjectNode imageUrlNode(String url) {
         ObjectNode node = objectMapper.createObjectNode();
@@ -357,27 +413,6 @@ public class GmsAiClient {
             return objectMapper.writeValueAsString(body);
         } catch (Exception e) {
             throw new RuntimeException("요청 직렬화 실패", e);
-        }
-    }
-
-    private ExplainResult parseResponse(String responseBody) {
-        try {
-            JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode choices = root.path("choices");
-            if (!choices.isArray() || choices.isEmpty()) {
-                throw new GmsApiException("GMS 응답에 choices가 없습니다.");
-            }
-            String content = choices.get(0).path("message").path("content").asText();
-            String json = extractJson(content);
-            JsonNode result = objectMapper.readTree(json);
-            int index = result.path("heritageIndex").asInt(0);
-            String explanation = result.path("explanation").asText("");
-            return new ExplainResult(index, explanation);
-        } catch (GmsApiException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("GMS 응답 파싱 실패: {}", responseBody);
-            throw new GmsApiException("AI 응답 파싱에 실패했습니다.", e);
         }
     }
 

@@ -22,9 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
@@ -53,27 +51,41 @@ public class HeritageService {
             throw new NoSuchElementException("주변 500m 내 문화재를 찾을 수 없습니다.");
         }
 
-        // 2. 각 문화재의 공식 설명 로드
-        Map<Long, String> descriptions = new LinkedHashMap<>();
-        for (Heritage h : candidates) {
-            heritageMapper.findDescriptions(h.getId()).stream()
-                    .filter(d -> "OFFICIAL".equals(d.getSource()))
-                    .findFirst()
-                    .ifPresent(d -> descriptions.put(h.getId(), d.getContent()));
-        }
-
-        // 3. GMS AI 호출 — 문화재 식별 + 해설 생성
-        GmsAiClient.ExplainResult result = gmsAiClient.explainHeritage(
-                request.image(), candidates, descriptions
-        );
-
-        if (result.heritageIndex() <= 0 || result.heritageIndex() > candidates.size()) {
+        // 2. GMS 분류 호출 (이미지 포함, max_tokens=50)
+        int heritageIndex = gmsAiClient.classifyHeritage(request.image(), candidates);
+        if (heritageIndex <= 0 || heritageIndex > candidates.size()) {
             throw new IllegalStateException("사진에서 주변 문화재를 식별할 수 없습니다.");
         }
+        Heritage identified = candidates.get(heritageIndex - 1);
 
-        Heritage identified = candidates.get(result.heritageIndex() - 1);
+        // 3. 기본 해설 캐시 확인 (heritage 단위)
+        HeritageDescription cached = heritageMapper.findAiDescription(identified.getId(), 1, "AI 기본 해설");
+        String explanation;
+        if (cached != null) {
+            log.info("[기본 해설 캐시 히트] heritage_id={}, name={}", identified.getId(), identified.getName());
+            explanation = cached.getContent();
+        } else {
+            // 4. 식별된 문화재의 공식 설명만 로드
+            String officialDesc = heritageMapper.findDescriptions(identified.getId()).stream()
+                    .filter(d -> "OFFICIAL".equals(d.getSource()))
+                    .findFirst()
+                    .map(HeritageDescription::getContent)
+                    .orElse(null);
 
-        // 4. visit_logs 저장
+            // 5. GMS 해설 호출 (이미지 없음, max_tokens=1500)
+            explanation = gmsAiClient.generateBasicExplanation(identified, officialDesc);
+
+            // 6. 기본 해설 캐시 저장 (heritage 단위)
+            heritageMapper.insertDescription(HeritageDescription.builder()
+                    .heritageId(identified.getId())
+                    .content(explanation)
+                    .depthLevel(1)
+                    .topic("AI 기본 해설")
+                    .source("AI_GENERATED")
+                    .build());
+        }
+
+        // 7. visit_log 저장
         Long visitLogId = null;
         if (request.tripId() != null) {
             String photoUrl = savePhoto(request.image());
@@ -83,13 +95,13 @@ public class HeritageService {
                     .photoUrl(photoUrl)
                     .lat(request.lat())
                     .lng(request.lng())
-                    .explanation(result.explanation())
+                    .explanation(explanation)
                     .build();
             tripMapper.insertVisitLog(visitLog);
             visitLogId = visitLog.getId();
         }
 
-        return new ExplainResponse(identified.getId(), identified.getName(), result.explanation(), visitLogId);
+        return new ExplainResponse(identified.getId(), identified.getName(), explanation, visitLogId);
     }
 
     public HeritageDetailResponse getDetail(Long heritageId) {
