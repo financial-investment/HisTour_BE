@@ -15,6 +15,8 @@ import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -303,7 +305,9 @@ public class GmsAiClient {
                 int nw = (int) (w * scale), nh = (int) (h * scale);
                 Image scaled = img.getScaledInstance(nw, nh, Image.SCALE_SMOOTH);
                 BufferedImage resized = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_RGB);
-                resized.createGraphics().drawImage(scaled, 0, 0, null);
+                Graphics2D g = resized.createGraphics();
+                g.drawImage(scaled, 0, 0, null);
+                g.dispose();
                 img = resized;
             }
 
@@ -312,8 +316,10 @@ public class GmsAiClient {
             ImageWriteParam param = writer.getDefaultWriteParam();
             param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
             param.setCompressionQuality(JPEG_QUALITY);
-            writer.setOutput(ImageIO.createImageOutputStream(baos));
-            writer.write(null, new IIOImage(img, null, null), param);
+            try (ImageOutputStream ios = ImageIO.createImageOutputStream(baos)) {
+                writer.setOutput(ios);
+                writer.write(null, new IIOImage(img, null, null), param);
+            }
             writer.dispose();
 
             byte[] compressed = baos.toByteArray();

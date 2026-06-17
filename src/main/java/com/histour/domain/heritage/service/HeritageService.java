@@ -2,6 +2,7 @@ package com.histour.domain.heritage.service;
 
 import com.histour.client.GmsAiClient;
 import com.histour.common.RateLimitService;
+import com.histour.common.exception.ForbiddenException;
 import com.histour.domain.heritage.dto.ExplainRequest;
 import com.histour.domain.heritage.dto.ExplainResponse;
 import com.histour.domain.heritage.dto.ExplainTopic;
@@ -67,11 +68,8 @@ public class HeritageService {
             explanation = cached.getContent();
         } else {
             // 4. 식별된 문화재의 공식 설명만 로드
-            String officialDesc = heritageMapper.findDescriptions(identified.getId()).stream()
-                    .filter(d -> "OFFICIAL".equals(d.getSource()))
-                    .findFirst()
-                    .map(HeritageDescription::getContent)
-                    .orElse(null);
+            HeritageDescription officialDes = heritageMapper.findOfficialDescription(identified.getId());
+            String officialDesc = officialDes != null ? officialDes.getContent() : null;
 
             // 5. GMS 해설 호출 (이미지 없음, max_tokens=1500)
             explanation = gmsAiClient.generateBasicExplanation(identified, officialDesc);
@@ -89,6 +87,10 @@ public class HeritageService {
         // 7. visit_log 저장
         Long visitLogId = null;
         if (request.tripId() != null) {
+            Trip trip = tripMapper.findTripById(request.tripId());
+            if (trip == null) throw new NoSuchElementException("여행을 찾을 수 없습니다.");
+            if (!trip.getUserId().equals(userId)) throw new ForbiddenException("접근 권한이 없습니다.");
+
             String photoUrl = savePhoto(request.image());
             VisitLog visitLog = VisitLog.builder()
                     .tripId(request.tripId())
@@ -109,11 +111,8 @@ public class HeritageService {
         Heritage heritage = heritageMapper.findById(heritageId);
         if (heritage == null) throw new NoSuchElementException("문화재를 찾을 수 없습니다.");
 
-        String description = heritageMapper.findDescriptions(heritageId).stream()
-                .filter(d -> "OFFICIAL".equals(d.getSource()))
-                .findFirst()
-                .map(HeritageDescription::getContent)
-                .orElse(null);
+        HeritageDescription officialDes = heritageMapper.findOfficialDescription(heritageId);
+        String description = officialDes != null ? officialDes.getContent() : null;
 
         List<String> mediaUrls = heritageMapper.findMedia(heritageId).stream()
                 .map(HeritageMedia::getUrl)
@@ -138,9 +137,12 @@ public class HeritageService {
         if (visitLog == null || visitLog.getExplanation() == null) {
             throw new IllegalStateException("기본 해설이 없습니다. 먼저 해설을 요청하세요.");
         }
+        if (!visitLog.getHeritageId().equals(heritageId)) {
+            throw new IllegalArgumentException("방문 기록과 문화재가 일치하지 않습니다.");
+        }
         Trip ownerTrip = tripMapper.findTripById(visitLog.getTripId());
         if (ownerTrip == null || !ownerTrip.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("접근 권한이 없습니다.");
+            throw new ForbiddenException("접근 권한이 없습니다.");
         }
 
         // topic을 캐시 키로 사용 (null이면 종합 해설)

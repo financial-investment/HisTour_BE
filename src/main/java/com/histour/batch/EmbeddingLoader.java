@@ -17,6 +17,7 @@ import redis.clients.jedis.search.schemafields.VectorField.VectorAlgorithm;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,12 +64,12 @@ public class EmbeddingLoader implements ApplicationRunner {
                 List<Float> embedding = gmsAiClient.createEmbedding(text);
 
                 Map<byte[], byte[]> fields = new HashMap<>();
-                fields.put("heritage_id".getBytes(), String.valueOf(h.getId()).getBytes());
-                fields.put("name".getBytes(), h.getName().getBytes());
-                fields.put("lat".getBytes(), String.valueOf(h.getLat()).getBytes());
-                fields.put("lng".getBytes(), String.valueOf(h.getLng()).getBytes());
-                fields.put("ccba_ctcd".getBytes(), (h.getCcbaCtcd() != null ? h.getCcbaCtcd() : "").getBytes());
-                fields.put("embedding".getBytes(), toBytes(embedding));
+                fields.put("heritage_id".getBytes(StandardCharsets.UTF_8), String.valueOf(h.getId()).getBytes(StandardCharsets.UTF_8));
+                fields.put("name".getBytes(StandardCharsets.UTF_8), h.getName().getBytes(StandardCharsets.UTF_8));
+                fields.put("lat".getBytes(StandardCharsets.UTF_8), String.valueOf(h.getLat()).getBytes(StandardCharsets.UTF_8));
+                fields.put("lng".getBytes(StandardCharsets.UTF_8), String.valueOf(h.getLng()).getBytes(StandardCharsets.UTF_8));
+                fields.put("ccba_ctcd".getBytes(StandardCharsets.UTF_8), (h.getCcbaCtcd() != null ? h.getCcbaCtcd() : "").getBytes(StandardCharsets.UTF_8));
+                fields.put("embedding".getBytes(StandardCharsets.UTF_8), toBytes(embedding));
                 jedisPooled.hset(key.getBytes(), fields);
                 saved++;
 

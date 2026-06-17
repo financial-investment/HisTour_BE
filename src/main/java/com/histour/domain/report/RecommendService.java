@@ -1,6 +1,7 @@
 package com.histour.domain.report;
 
 import com.histour.batch.EmbeddingLoader;
+import com.histour.common.exception.ForbiddenException;
 import com.histour.domain.heritage.entity.Heritage;
 import com.histour.domain.heritage.mapper.HeritageMapper;
 import com.histour.domain.report.dto.RecommendedHeritage;
@@ -32,7 +33,7 @@ public class RecommendService {
     public List<RecommendedHeritage> recommendNearby(Long tripId, Long userId, double lat, double lng, double radiusKm) {
         Trip trip = tripMapper.findTripById(tripId);
         if (trip == null) throw new NoSuchElementException("여행을 찾을 수 없습니다.");
-        if (!trip.getUserId().equals(userId)) throw new IllegalArgumentException("접근 권한이 없습니다.");
+        if (!trip.getUserId().equals(userId)) throw new ForbiddenException("접근 권한이 없습니다.");
 
         List<Heritage> visited = heritageMapper.findVisitedByTripId(tripId);
         if (visited.isEmpty()) return List.of();

@@ -20,11 +20,17 @@ public class RateLimitService {
         String key = KEY_PREFIX + userId;
         Long count = redisTemplate.opsForValue().increment(key);
 
-        if (count == 1) {
+        if (count != null && count == 1) {
             redisTemplate.expire(key, WINDOW);
+        } else if (Boolean.TRUE.equals(redisTemplate.hasKey(key)) && redisTemplate.getExpire(key) < 0) {
+            // 서버 재시작 등으로 EXPIRE가 누락된 TTL 없는 키 복구
+            redisTemplate.delete(key);
+            redisTemplate.opsForValue().set(key, "1");
+            redisTemplate.expire(key, WINDOW);
+            count = 1L;
         }
 
-        if (count > MAX_CALLS) {
+        if (count != null && count > MAX_CALLS) {
             throw new IllegalStateException("해설 요청은 1분에 최대 " + MAX_CALLS + "회까지 가능합니다.");
         }
     }

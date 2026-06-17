@@ -21,6 +21,7 @@ public interface HeritageMapper {
     List<Heritage> findAllForEmbedding();
     List<Heritage> findVisitedByTripId(@Param("tripId") Long tripId);
     List<HeritageDescription> findDescriptions(@Param("heritageId") Long heritageId);
+    HeritageDescription findOfficialDescription(@Param("heritageId") Long heritageId);
     List<HeritageMedia> findMedia(@Param("heritageId") Long heritageId);
     HeritageDescription findAiDescription(@Param("heritageId") Long heritageId, @Param("depthLevel") int depthLevel, @Param("topic") String topic);
 }

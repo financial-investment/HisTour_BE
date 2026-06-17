@@ -55,6 +55,15 @@
         WHERE id = #{id}
     </select>
 
+    <select id="findOfficialDescription" resultType="com.histour.domain.heritage.entity.HeritageDescription">
+        SELECT id, heritage_id, content, depth_level, topic, parent_id, source
+        FROM heritage_descriptions
+        WHERE heritage_id = #{heritageId}
+          AND source = 'OFFICIAL'
+          AND depth_level = 1
+        LIMIT 1
+    </select>
+
     <select id="findAiDescription" resultType="com.histour.domain.heritage.entity.HeritageDescription">
         SELECT id, heritage_id, content, depth_level, topic, parent_id, source
         FROM heritage_descriptions

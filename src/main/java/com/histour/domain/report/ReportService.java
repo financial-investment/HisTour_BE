@@ -1,6 +1,7 @@
 package com.histour.domain.report;
 
 import com.histour.client.GmsAiClient;
+import com.histour.common.exception.ForbiddenException;
 import com.histour.domain.heritage.entity.Heritage;
 import com.histour.domain.heritage.mapper.HeritageMapper;
 import com.histour.domain.report.dto.CourseResponse;
@@ -26,7 +27,7 @@ public class ReportService {
     public ReportResponse generateReport(Long tripId, Long userId) {
         Trip trip = tripMapper.findTripById(tripId);
         if (trip == null) throw new NoSuchElementException("여행을 찾을 수 없습니다.");
-        if (!trip.getUserId().equals(userId)) throw new IllegalArgumentException("접근 권한이 없습니다.");
+        if (!trip.getUserId().equals(userId)) throw new ForbiddenException("접근 권한이 없습니다.");
         if (!"COMPLETED".equals(trip.getStatus())) throw new IllegalStateException("완료된 여행만 리포트를 조회할 수 있습니다.");
 
         List<Heritage> visited = heritageMapper.findVisitedByTripId(tripId);
