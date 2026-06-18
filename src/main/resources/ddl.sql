@@ -77,6 +77,10 @@ CREATE TABLE quiz (
     title           VARCHAR(255) NOT NULL,
     content         VARCHAR(1000) NOT NULL,
     correct_answer  VARCHAR(1000) NOT NULL,
+    explanation     TEXT,
+    source          ENUM('PAST_EXAM','AI_GENERATED','MANUAL') NOT NULL DEFAULT 'AI_GENERATED',
+    difficulty      ENUM('EASY','MEDIUM','HARD') NOT NULL DEFAULT 'MEDIUM',
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (heritage_id) REFERENCES heritage(id)
 );
 
@@ -88,15 +92,30 @@ CREATE TABLE quiz_choices (
     FOREIGN KEY (quiz_id) REFERENCES quiz(id)
 );
 
-CREATE TABLE quiz_results (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id         BIGINT NOT NULL,
-    trip_id         BIGINT NOT NULL,
-    quiz_id         BIGINT NOT NULL,
-    user_answer     VARCHAR(1000),
-    is_correct      BOOLEAN,
-    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
+CREATE TABLE quiz_sessions (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    trip_id     BIGINT NOT NULL,
+    quiz_id     BIGINT NOT NULL,
+    sort_order  INT NOT NULL,
+    status      ENUM('CREATED','SUBMITTED') NOT NULL DEFAULT 'CREATED',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_quiz_sessions_trip_quiz (trip_id, quiz_id),
+    INDEX idx_quiz_sessions_trip_id (trip_id),
+    INDEX idx_quiz_sessions_quiz_id (quiz_id),
     FOREIGN KEY (trip_id) REFERENCES trips(id),
     FOREIGN KEY (quiz_id) REFERENCES quiz(id)
 );
+
+CREATE TABLE quiz_results (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    quiz_session_id     BIGINT NOT NULL,
+    selected_choice_id  BIGINT NOT NULL,
+    is_correct          BOOLEAN NOT NULL DEFAULT FALSE,
+    answered_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_quiz_results_session (quiz_session_id),
+    INDEX idx_quiz_results_session_id (quiz_session_id),
+    INDEX idx_quiz_results_choice_id (selected_choice_id),
+    FOREIGN KEY (quiz_session_id) REFERENCES quiz_sessions(id),
+    FOREIGN KEY (selected_choice_id) REFERENCES quiz_choices(id)
+);
+
