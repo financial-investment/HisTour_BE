@@ -2,6 +2,8 @@ package com.histour.api.controller;
 
 import com.histour.common.response.ApiResponse;
 import com.histour.domain.quiz.QuizService;
+import com.histour.domain.quiz.dto.QuizResultResponse;
+import com.histour.domain.quiz.dto.QuizResultSubmitRequest;
 import com.histour.domain.quiz.dto.QuizSessionCreateRequest;
 import com.histour.domain.quiz.dto.QuizSessionResponse;
 import jakarta.validation.Valid;
@@ -32,5 +34,14 @@ public class QuizController {
     ) {
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.ok(quizService.getSessionByTripId(userId, tripId));
+    }
+
+    @PostMapping("/results")
+    public ApiResponse<QuizResultResponse> submitResults(
+            Authentication authentication,
+            @RequestBody @Valid QuizResultSubmitRequest request
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(quizService.submitResults(userId, request));
     }
 }

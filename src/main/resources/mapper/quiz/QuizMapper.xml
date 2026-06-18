@@ -33,13 +33,24 @@
     <select id="findSessionQuestionsByTripId" resultType="com.histour.domain.quiz.entity.QuizSessionQuestion">
         SELECT s.id AS session_id, s.trip_id, s.quiz_id,
                q.heritage_id, h.name AS heritage_name,
-               q.title, q.content, q.source, q.difficulty,
+               q.title, q.content, q.explanation, q.source, q.difficulty,
                s.sort_order
         FROM quiz_sessions s
         JOIN quiz q ON s.quiz_id = q.id
         JOIN heritage h ON q.heritage_id = h.id
         WHERE s.trip_id = #{tripId}
         ORDER BY s.sort_order
+    </select>
+
+    <select id="findSessionQuestionBySessionId" resultType="com.histour.domain.quiz.entity.QuizSessionQuestion">
+        SELECT s.id AS session_id, s.trip_id, s.quiz_id,
+               q.heritage_id, h.name AS heritage_name,
+               q.title, q.content, q.explanation, q.source, q.difficulty,
+               s.sort_order
+        FROM quiz_sessions s
+        JOIN quiz q ON s.quiz_id = q.id
+        JOIN heritage h ON q.heritage_id = h.id
+        WHERE s.id = #{sessionId}
     </select>
 
     <select id="findChoicesByQuizIds" resultType="com.histour.domain.quiz.entity.QuizChoice">
@@ -51,4 +62,35 @@
         </foreach>
         ORDER BY id
     </select>
+
+    <select id="findChoiceById" resultType="com.histour.domain.quiz.entity.QuizChoice">
+        SELECT id, quiz_id, content, is_correct AS correct
+        FROM quiz_choices
+        WHERE id = #{choiceId}
+    </select>
+
+    <select id="findCorrectChoiceByQuizId" resultType="com.histour.domain.quiz.entity.QuizChoice">
+        SELECT id, quiz_id, content, is_correct AS correct
+        FROM quiz_choices
+        WHERE quiz_id = #{quizId}
+          AND is_correct = TRUE
+        LIMIT 1
+    </select>
+
+    <select id="findResultBySessionId" resultType="com.histour.domain.quiz.entity.QuizResult">
+        SELECT id, quiz_session_id, selected_choice_id, is_correct AS correct, answered_at
+        FROM quiz_results
+        WHERE quiz_session_id = #{sessionId}
+    </select>
+
+    <insert id="insertResult" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO quiz_results (quiz_session_id, selected_choice_id, is_correct, answered_at)
+        VALUES (#{quizSessionId}, #{selectedChoiceId}, #{correct}, NOW())
+    </insert>
+
+    <update id="updateSessionStatus">
+        UPDATE quiz_sessions
+        SET status = #{status}
+        WHERE id = #{sessionId}
+    </update>
 </mapper>

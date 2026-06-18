@@ -6,10 +6,14 @@ import com.histour.domain.quiz.dto.AiQuizQuestion;
 import com.histour.domain.quiz.dto.AiVisitedHeritage;
 import com.histour.domain.quiz.dto.QuizChoiceResponse;
 import com.histour.domain.quiz.dto.QuizQuestionResponse;
+import com.histour.domain.quiz.dto.QuizResultItemResponse;
+import com.histour.domain.quiz.dto.QuizResultResponse;
+import com.histour.domain.quiz.dto.QuizResultSubmitRequest;
 import com.histour.domain.quiz.dto.QuizSessionCreateRequest;
 import com.histour.domain.quiz.dto.QuizSessionResponse;
 import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
+import com.histour.domain.quiz.entity.QuizResult;
 import com.histour.domain.quiz.entity.QuizSession;
 import com.histour.domain.quiz.entity.QuizSessionQuestion;
 import com.histour.domain.trip.Trip;
@@ -103,6 +107,90 @@ public class QuizService {
             throw new NoSuchElementException("생성된 퀴즈 세션이 없습니다.");
         }
         return toResponse(tripId, questions);
+    }
+
+    public QuizResultResponse submitResults(Long userId, QuizResultSubmitRequest request) {
+        List<PreparedQuizResult> preparedResults = prepareQuizResults(userId, request);
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            for (PreparedQuizResult prepared : preparedResults) {
+                quizMapper.insertResult(QuizResult.builder()
+                        .quizSessionId(prepared.item().sessionId())
+                        .selectedChoiceId(prepared.item().selectedChoiceId())
+                        .correct(prepared.item().correct())
+                        .build());
+                quizMapper.updateSessionStatus(prepared.item().sessionId(), "SUBMITTED");
+            }
+        });
+
+        int correctCount = (int) preparedResults.stream()
+                .filter(prepared -> prepared.item().correct())
+                .count();
+        int totalCount = preparedResults.size();
+        int accuracy = totalCount == 0 ? 0 : (int) Math.round(correctCount * 100.0 / totalCount);
+        Long tripId = preparedResults.getFirst().tripId();
+
+        return new QuizResultResponse(
+                tripId,
+                totalCount,
+                correctCount,
+                accuracy,
+                preparedResults.stream()
+                        .map(PreparedQuizResult::item)
+                        .toList()
+        );
+    }
+
+    private List<PreparedQuizResult> prepareQuizResults(Long userId, QuizResultSubmitRequest request) {
+        List<PreparedQuizResult> preparedResults = new ArrayList<>();
+        Long targetTripId = null;
+
+        for (var answer : request.answers()) {
+            QuizSessionQuestion sessionQuestion = quizMapper.findSessionQuestionBySessionId(answer.sessionId());
+            if (sessionQuestion == null) {
+                throw new NoSuchElementException("퀴즈 세션을 찾을 수 없습니다.");
+            }
+            if (targetTripId == null) {
+                targetTripId = sessionQuestion.getTripId();
+                validateTripOwner(targetTripId, userId);
+            } else if (!Objects.equals(targetTripId, sessionQuestion.getTripId())) {
+                throw new IllegalArgumentException("하나의 여행에 속한 답안만 제출할 수 있습니다.");
+            }
+
+            if (quizMapper.findResultBySessionId(answer.sessionId()) != null) {
+                throw new IllegalStateException("이미 제출된 퀴즈입니다.");
+            }
+
+            QuizChoice selectedChoice = quizMapper.findChoiceById(answer.choiceId());
+            if (selectedChoice == null || !Objects.equals(selectedChoice.getQuizId(), sessionQuestion.getQuizId())) {
+                throw new IllegalArgumentException("퀴즈에 속하지 않은 선택지입니다.");
+            }
+
+            QuizChoice correctChoice = quizMapper.findCorrectChoiceByQuizId(sessionQuestion.getQuizId());
+            if (correctChoice == null) {
+                throw new IllegalStateException("정답 선택지가 없습니다.");
+            }
+
+            preparedResults.add(new PreparedQuizResult(
+                    sessionQuestion.getTripId(),
+                    new QuizResultItemResponse(
+                            answer.sessionId(),
+                            sessionQuestion.getQuizId(),
+                            selectedChoice.isCorrect(),
+                            answer.choiceId(),
+                            correctChoice.getId(),
+                            sessionQuestion.getExplanation()
+                    )
+            ));
+        }
+
+        return preparedResults;
+    }
+
+    private record PreparedQuizResult(
+            Long tripId,
+            QuizResultItemResponse item
+    ) {
     }
 
     private void validateTripOwner(Long tripId, Long userId) {

@@ -3,8 +3,12 @@ package com.histour.domain.quiz;
 import com.histour.client.QuizAiClient;
 import com.histour.domain.quiz.dto.AiQuizGenerateRequest;
 import com.histour.domain.quiz.dto.AiQuizQuestion;
+import com.histour.domain.quiz.dto.QuizAnswerSubmitRequest;
+import com.histour.domain.quiz.dto.QuizResultResponse;
+import com.histour.domain.quiz.dto.QuizResultSubmitRequest;
 import com.histour.domain.quiz.dto.QuizSessionCreateRequest;
 import com.histour.domain.quiz.dto.QuizSessionResponse;
+import com.histour.domain.quiz.entity.QuizResult;
 import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
 import com.histour.domain.quiz.entity.QuizSession;
@@ -274,6 +278,67 @@ class QuizServiceTest {
                 .anyMatch(quizId -> quizId >= 200L && quizId < 300L);
     }
 
+    @Test
+    void submitResultsGradesAndStoresAnswers() {
+        Long tripId = 1L;
+        when(quizMapper.findSessionQuestionBySessionId(10L)).thenReturn(
+                sessionQuestion(10L, tripId, 100L, 1L, "서울 숭례문", 1)
+        );
+        when(quizMapper.findSessionQuestionBySessionId(11L)).thenReturn(
+                sessionQuestion(11L, tripId, 101L, 1L, "서울 숭례문", 2)
+        );
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
+        when(quizMapper.findResultBySessionId(any())).thenReturn(null);
+        when(quizMapper.findChoiceById(1L)).thenReturn(choice(1L, 100L, "정답", true));
+        when(quizMapper.findChoiceById(5L)).thenReturn(choice(5L, 101L, "오답", false));
+        when(quizMapper.findCorrectChoiceByQuizId(100L)).thenReturn(choice(1L, 100L, "정답", true));
+        when(quizMapper.findCorrectChoiceByQuizId(101L)).thenReturn(choice(4L, 101L, "정답", true));
+
+        QuizResultResponse response = quizService.submitResults(USER_ID, new QuizResultSubmitRequest(List.of(
+                new QuizAnswerSubmitRequest(10L, 1L),
+                new QuizAnswerSubmitRequest(11L, 5L)
+        )));
+
+        ArgumentCaptor<QuizResult> resultCaptor = ArgumentCaptor.forClass(QuizResult.class);
+        verify(quizMapper, times(2)).insertResult(resultCaptor.capture());
+        assertThat(resultCaptor.getAllValues())
+                .extracting(QuizResult::getQuizSessionId, QuizResult::getSelectedChoiceId, QuizResult::isCorrect)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(10L, 1L, true),
+                        org.assertj.core.groups.Tuple.tuple(11L, 5L, false)
+                );
+        verify(quizMapper).updateSessionStatus(10L, "SUBMITTED");
+        verify(quizMapper).updateSessionStatus(11L, "SUBMITTED");
+
+        assertThat(response.tripId()).isEqualTo(tripId);
+        assertThat(response.totalCount()).isEqualTo(2);
+        assertThat(response.correctCount()).isEqualTo(1);
+        assertThat(response.accuracy()).isEqualTo(50);
+        assertThat(response.results())
+                .extracting(result -> result.correctChoiceId())
+                .containsExactly(1L, 4L);
+    }
+
+    @Test
+    void submitResultsThrowsWhenChoiceDoesNotBelongToQuiz() {
+        Long tripId = 1L;
+        when(quizMapper.findSessionQuestionBySessionId(10L)).thenReturn(
+                sessionQuestion(10L, tripId, 100L, 1L, "서울 숭례문", 1)
+        );
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
+        when(quizMapper.findResultBySessionId(10L)).thenReturn(null);
+        when(quizMapper.findChoiceById(1L)).thenReturn(choice(1L, 999L, "다른 문제 선택지", false));
+
+        assertThatThrownBy(() -> quizService.submitResults(USER_ID, new QuizResultSubmitRequest(List.of(
+                new QuizAnswerSubmitRequest(10L, 1L)
+        ))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("퀴즈에 속하지 않은 선택지입니다.");
+
+        verify(quizMapper, never()).insertResult(any());
+        verify(quizMapper, never()).updateSessionStatus(any(), any());
+    }
+
     private QuizSessionQuestion sessionQuestion(Long sessionId,
                                                 Long tripId,
                                                 Long quizId,
@@ -288,6 +353,7 @@ class QuizServiceTest {
                 .heritageName(heritageName)
                 .title("퀴즈 제목")
                 .content("퀴즈 본문")
+                .explanation("퀴즈 해설")
                 .source("AI_GENERATED")
                 .difficulty("MEDIUM")
                 .sortOrder(sortOrder)
@@ -302,11 +368,15 @@ class QuizServiceTest {
     }
 
     private QuizChoice choice(Long id, Long quizId, String content) {
+        return choice(id, quizId, content, false);
+    }
+
+    private QuizChoice choice(Long id, Long quizId, String content, boolean correct) {
         return QuizChoice.builder()
                 .id(id)
                 .quizId(quizId)
                 .content(content)
-                .correct(false)
+                .correct(correct)
                 .build();
     }
 

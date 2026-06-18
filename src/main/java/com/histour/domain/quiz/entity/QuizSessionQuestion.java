@@ -17,6 +17,7 @@ public class QuizSessionQuestion {
     private String heritageName;
     private String title;
     private String content;
+    private String explanation;
     private String source;
     private String difficulty;
     private int sortOrder;
