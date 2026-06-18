@@ -1,5 +1,9 @@
 package com.histour.domain.quiz;
 
+import com.histour.client.QuizAiClient;
+import com.histour.domain.quiz.dto.AiQuizGenerateRequest;
+import com.histour.domain.quiz.dto.AiQuizQuestion;
+import com.histour.domain.quiz.dto.AiVisitedHeritage;
 import com.histour.domain.quiz.dto.QuizChoiceResponse;
 import com.histour.domain.quiz.dto.QuizQuestionResponse;
 import com.histour.domain.quiz.dto.QuizSessionCreateRequest;
@@ -13,8 +17,9 @@ import com.histour.domain.trip.TripMapper;
 import com.histour.domain.trip.VisitLog;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
@@ -35,8 +40,9 @@ public class QuizService {
 
     private final QuizMapper quizMapper;
     private final TripMapper tripMapper;
+    private final QuizAiClient quizAiClient;
+    private final PlatformTransactionManager transactionManager;
 
-    @Transactional
     public QuizSessionResponse createSession(Long userId, QuizSessionCreateRequest request) {
         validateTripOwner(request.tripId(), userId);
 
@@ -60,22 +66,31 @@ public class QuizService {
         }
 
         List<Quiz> candidateQuizzes = quizMapper.findQuizzesByHeritageIds(heritageIds);
-        if (candidateQuizzes.isEmpty()) {
-            throw new IllegalStateException("방문 유적지와 연결된 퀴즈가 없습니다.");
-        }
         List<Quiz> quizzes = selectBalancedRandomQuizzes(candidateQuizzes, heritageIds, DAILY_QUIZ_COUNT);
+        List<AiQuizQuestion> aiQuestions = List.of();
         if (quizzes.size() < DAILY_QUIZ_COUNT) {
-            throw new IllegalStateException("퀴즈 10개를 만들기 위한 기존 문제가 부족합니다. AI 생성이 필요합니다.");
+            int missingCount = DAILY_QUIZ_COUNT - quizzes.size();
+            aiQuestions = generateValidAiQuestions(missingCount, visitLogs, heritageIds);
+        }
+        if (quizzes.size() + aiQuestions.size() < DAILY_QUIZ_COUNT) {
+            throw new IllegalStateException("퀴즈 10개를 생성하지 못했습니다.");
         }
 
-        for (int i = 0; i < quizzes.size(); i++) {
-            quizMapper.insertSession(QuizSession.builder()
-                    .tripId(request.tripId())
-                    .quizId(quizzes.get(i).getId())
-                    .sortOrder(i + 1)
-                    .status("CREATED")
-                    .build());
-        }
+        List<Quiz> existingQuizzes = quizzes;
+        List<AiQuizQuestion> generatedAiQuestions = aiQuestions;
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            List<Quiz> sessionQuizzes = new ArrayList<>(existingQuizzes);
+            sessionQuizzes.addAll(saveAiQuizzes(generatedAiQuestions));
+
+            for (int i = 0; i < sessionQuizzes.size(); i++) {
+                quizMapper.insertSession(QuizSession.builder()
+                        .tripId(request.tripId())
+                        .quizId(sessionQuizzes.get(i).getId())
+                        .sortOrder(i + 1)
+                        .status("CREATED")
+                        .build());
+            }
+        });
 
         return getSessionByTripId(userId, request.tripId());
     }
@@ -132,6 +147,87 @@ public class QuizService {
                 .toList();
 
         return new QuizSessionResponse(tripId, questionResponses.size(), questionResponses);
+    }
+
+    private List<AiQuizQuestion> generateValidAiQuestions(int missingCount, List<VisitLog> visitLogs, List<Long> heritageIds) {
+        Set<Long> validHeritageIds = new HashSet<>(heritageIds);
+        AiQuizGenerateRequest request = new AiQuizGenerateRequest(
+                missingCount,
+                visitLogs.stream()
+                        .filter(visitLog -> visitLog.getHeritageId() != null)
+                        .map(visitLog -> new AiVisitedHeritage(
+                                visitLog.getHeritageId(),
+                                visitLog.getHeritageName(),
+                                visitLog.getExplanation()
+                        ))
+                        .toList()
+        );
+
+        List<AiQuizQuestion> generatedQuestions = quizAiClient.generateQuestions(request);
+        List<AiQuizQuestion> validQuestions = new ArrayList<>();
+        for (AiQuizQuestion question : generatedQuestions) {
+            if (validQuestions.size() == missingCount) {
+                break;
+            }
+            if (!isValidAiQuestion(question, validHeritageIds)) {
+                continue;
+            }
+            validQuestions.add(question);
+        }
+        return validQuestions;
+    }
+
+    private List<Quiz> saveAiQuizzes(List<AiQuizQuestion> questions) {
+        List<Quiz> savedQuizzes = new ArrayList<>();
+        for (AiQuizQuestion question : questions) {
+            String correctAnswer = question.choices().get(question.answerIndex());
+            Quiz quiz = Quiz.builder()
+                    .heritageId(question.heritageId())
+                    .title(question.title())
+                    .content(question.content())
+                    .correctAnswer(correctAnswer)
+                    .explanation(question.explanation())
+                    .source("AI_GENERATED")
+                    .difficulty(normalizeDifficulty(question.difficulty()))
+                    .build();
+            quizMapper.insertQuiz(quiz);
+
+            for (int i = 0; i < question.choices().size(); i++) {
+                quizMapper.insertChoice(QuizChoice.builder()
+                        .quizId(quiz.getId())
+                        .content(question.choices().get(i))
+                        .correct(i == question.answerIndex())
+                        .build());
+            }
+            savedQuizzes.add(quiz);
+        }
+        return savedQuizzes;
+    }
+
+    private boolean isValidAiQuestion(AiQuizQuestion question, Set<Long> validHeritageIds) {
+        return question != null
+                && question.heritageId() != null
+                && validHeritageIds.contains(question.heritageId())
+                && question.title() != null
+                && !question.title().isBlank()
+                && question.content() != null
+                && !question.content().isBlank()
+                && question.choices() != null
+                && question.choices().size() == 4
+                && question.answerIndex() >= 0
+                && question.answerIndex() < 4
+                && question.explanation() != null
+                && !question.explanation().isBlank();
+    }
+
+    private String normalizeDifficulty(String difficulty) {
+        if (difficulty == null) {
+            return "MEDIUM";
+        }
+        return switch (difficulty) {
+            case "EASY", "MEDIUM", "HARD" -> difficulty;
+            default -> "MEDIUM";
+        };
     }
 
     private List<Quiz> selectBalancedRandomQuizzes(List<Quiz> candidates, List<Long> heritageIds, int targetCount) {

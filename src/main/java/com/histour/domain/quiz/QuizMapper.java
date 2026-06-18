@@ -13,6 +13,10 @@ import java.util.List;
 public interface QuizMapper {
     List<Quiz> findQuizzesByHeritageIds(@Param("heritageIds") List<Long> heritageIds);
 
+    void insertQuiz(Quiz quiz);
+
+    void insertChoice(QuizChoice choice);
+
     void insertSession(QuizSession session);
 
     List<QuizSessionQuestion> findSessionQuestionsByTripId(@Param("tripId") Long tripId);

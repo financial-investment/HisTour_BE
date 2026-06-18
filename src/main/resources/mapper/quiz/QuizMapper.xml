@@ -15,6 +15,16 @@
         ORDER BY q.source = 'PAST_EXAM' DESC, q.id DESC
     </select>
 
+    <insert id="insertQuiz" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO quiz (heritage_id, title, content, correct_answer, explanation, source, difficulty, created_at)
+        VALUES (#{heritageId}, #{title}, #{content}, #{correctAnswer}, #{explanation}, #{source}, #{difficulty}, NOW())
+    </insert>
+
+    <insert id="insertChoice" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO quiz_choices (quiz_id, content, is_correct)
+        VALUES (#{quizId}, #{content}, #{correct})
+    </insert>
+
     <insert id="insertSession" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO quiz_sessions (trip_id, quiz_id, sort_order, status, created_at)
         VALUES (#{tripId}, #{quizId}, #{sortOrder}, #{status}, NOW())
