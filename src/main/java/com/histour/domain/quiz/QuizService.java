@@ -14,6 +14,7 @@ import com.histour.domain.trip.VisitLog;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
@@ -36,11 +37,8 @@ public class QuizService {
     private final TripMapper tripMapper;
 
     @Transactional
-    public QuizSessionResponse createSession(QuizSessionCreateRequest request) {
-        Trip trip = tripMapper.findTripById(request.tripId());
-        if (trip == null) {
-            throw new NoSuchElementException("여행을 찾을 수 없습니다.");
-        }
+    public QuizSessionResponse createSession(Long userId, QuizSessionCreateRequest request) {
+        validateTripOwner(request.tripId(), userId);
 
         List<QuizSessionQuestion> existingQuestions = quizMapper.findSessionQuestionsByTripId(request.tripId());
         if (!existingQuestions.isEmpty()) {
@@ -79,15 +77,27 @@ public class QuizService {
                     .build());
         }
 
-        return getSessionByTripId(request.tripId());
+        return getSessionByTripId(userId, request.tripId());
     }
 
-    public QuizSessionResponse getSessionByTripId(Long tripId) {
+    public QuizSessionResponse getSessionByTripId(Long userId, Long tripId) {
+        validateTripOwner(tripId, userId);
+
         List<QuizSessionQuestion> questions = quizMapper.findSessionQuestionsByTripId(tripId);
         if (questions.isEmpty()) {
             throw new NoSuchElementException("생성된 퀴즈 세션이 없습니다.");
         }
         return toResponse(tripId, questions);
+    }
+
+    private void validateTripOwner(Long tripId, Long userId) {
+        Trip trip = tripMapper.findTripById(tripId);
+        if (trip == null) {
+            throw new NoSuchElementException("여행을 찾을 수 없습니다.");
+        }
+        if (!Objects.equals(trip.getUserId(), userId)) {
+            throw new AccessDeniedException("해당 여행에 접근할 수 없습니다.");
+        }
     }
 
     private QuizSessionResponse toResponse(Long tripId, List<QuizSessionQuestion> questions) {

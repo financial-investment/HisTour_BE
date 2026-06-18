@@ -15,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -25,6 +26,8 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class QuizServiceTest {
+
+    private static final Long USER_ID = 1L;
 
     @Mock
     private QuizMapper quizMapper;
@@ -38,7 +41,7 @@ class QuizServiceTest {
     @Test
     void createSessionReturnsExistingSessionWithoutCreatingAgain() {
         Long tripId = 1L;
-        when(tripMapper.findTripById(tripId)).thenReturn(Trip.builder().id(tripId).build());
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
         when(quizMapper.findSessionQuestionsByTripId(tripId)).thenReturn(List.of(
                 sessionQuestion(10L, tripId, 100L, 1L, "서울 숭례문", 1)
         ));
@@ -47,7 +50,7 @@ class QuizServiceTest {
                 choice(2L, 100L, "선택지 B")
         ));
 
-        QuizSessionResponse response = quizService.createSession(new QuizSessionCreateRequest(tripId));
+        QuizSessionResponse response = quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId));
 
         assertThat(response.tripId()).isEqualTo(tripId);
         assertThat(response.totalCount()).isEqualTo(1);
@@ -62,7 +65,7 @@ class QuizServiceTest {
     @Test
     void createSessionCreatesSessionsFromVisitedHeritageQuizzes() {
         Long tripId = 1L;
-        when(tripMapper.findTripById(tripId)).thenReturn(Trip.builder().id(tripId).build());
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
         when(quizMapper.findSessionQuestionsByTripId(tripId))
                 .thenReturn(List.of())
                 .thenReturn(List.of(
@@ -97,7 +100,7 @@ class QuizServiceTest {
                 choice(2L, 101L, "선택지 B")
         ));
 
-        QuizSessionResponse response = quizService.createSession(new QuizSessionCreateRequest(tripId));
+        QuizSessionResponse response = quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId));
 
         ArgumentCaptor<QuizSession> captor = ArgumentCaptor.forClass(QuizSession.class);
         verify(quizMapper, times(10)).insertSession(captor.capture());
@@ -125,19 +128,32 @@ class QuizServiceTest {
     void createSessionThrowsWhenTripDoesNotExist() {
         when(tripMapper.findTripById(404L)).thenReturn(null);
 
-        assertThatThrownBy(() -> quizService.createSession(new QuizSessionCreateRequest(404L)))
+        assertThatThrownBy(() -> quizService.createSession(USER_ID, new QuizSessionCreateRequest(404L)))
                 .isInstanceOf(NoSuchElementException.class)
                 .hasMessage("여행을 찾을 수 없습니다.");
     }
 
     @Test
+    void createSessionThrowsWhenTripBelongsToAnotherUser() {
+        Long tripId = 1L;
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, 99L));
+
+        assertThatThrownBy(() -> quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId)))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("해당 여행에 접근할 수 없습니다.");
+
+        verify(quizMapper, never()).findSessionQuestionsByTripId(any());
+        verify(quizMapper, never()).insertSession(any());
+    }
+
+    @Test
     void createSessionThrowsWhenVisitLogsAreEmpty() {
         Long tripId = 1L;
-        when(tripMapper.findTripById(tripId)).thenReturn(Trip.builder().id(tripId).build());
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
         when(quizMapper.findSessionQuestionsByTripId(tripId)).thenReturn(List.of());
         when(tripMapper.findVisitLogsByTripId(tripId)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> quizService.createSession(new QuizSessionCreateRequest(tripId)))
+        assertThatThrownBy(() -> quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("방문 기록이 없어 퀴즈를 생성할 수 없습니다.");
     }
@@ -145,7 +161,7 @@ class QuizServiceTest {
     @Test
     void createSessionThrowsWhenExistingQuizzesAreLessThanTen() {
         Long tripId = 1L;
-        when(tripMapper.findTripById(tripId)).thenReturn(Trip.builder().id(tripId).build());
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
         when(quizMapper.findSessionQuestionsByTripId(tripId)).thenReturn(List.of());
         when(tripMapper.findVisitLogsByTripId(tripId)).thenReturn(List.of(
                 visitLog(tripId, 1L)
@@ -154,7 +170,7 @@ class QuizServiceTest {
                 quiz(100L, 1L)
         ));
 
-        assertThatThrownBy(() -> quizService.createSession(new QuizSessionCreateRequest(tripId)))
+        assertThatThrownBy(() -> quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("퀴즈 10개를 만들기 위한 기존 문제가 부족합니다. AI 생성이 필요합니다.");
 
@@ -164,7 +180,7 @@ class QuizServiceTest {
     @Test
     void createSessionSelectsQuizzesAcrossVisitedHeritages() {
         Long tripId = 1L;
-        when(tripMapper.findTripById(tripId)).thenReturn(Trip.builder().id(tripId).build());
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
         when(quizMapper.findSessionQuestionsByTripId(tripId))
                 .thenReturn(List.of())
                 .thenReturn(List.of(
@@ -191,7 +207,7 @@ class QuizServiceTest {
         ));
         when(quizMapper.findChoicesByQuizIds(any())).thenReturn(List.of());
 
-        quizService.createSession(new QuizSessionCreateRequest(tripId));
+        quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId));
 
         ArgumentCaptor<QuizSession> captor = ArgumentCaptor.forClass(QuizSession.class);
         verify(quizMapper, times(10)).insertSession(captor.capture());
@@ -218,6 +234,13 @@ class QuizServiceTest {
                 .source("AI_GENERATED")
                 .difficulty("MEDIUM")
                 .sortOrder(sortOrder)
+                .build();
+    }
+
+    private Trip trip(Long tripId, Long userId) {
+        return Trip.builder()
+                .id(tripId)
+                .userId(userId)
                 .build();
     }
 
