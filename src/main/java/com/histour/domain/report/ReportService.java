@@ -10,6 +10,7 @@ import com.histour.domain.report.dto.VisitedHeritage;
 import com.histour.domain.trip.Trip;
 import com.histour.domain.trip.TripMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,10 +20,13 @@ import java.util.NoSuchElementException;
 @RequiredArgsConstructor
 public class ReportService {
 
+    private static final String SUMMARY_CACHE_PREFIX = "report:summary:";
+
     private final TripMapper tripMapper;
     private final HeritageMapper heritageMapper;
     private final CourseService courseService;
     private final GmsAiClient gmsAiClient;
+    private final RedisTemplate<String, String> redisTemplate;
 
     public ReportResponse generateReport(Long tripId, Long userId) {
         Trip trip = tripMapper.findTripById(tripId);
@@ -38,11 +42,18 @@ public class ReportService {
 
         CourseResponse course = courseService.recommendCourse(tripId);
 
+        String cacheKey = SUMMARY_CACHE_PREFIX + tripId;
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (cached != null) {
+            return new ReportResponse(tripId, visitedDtos, course, cached);
+        }
+
         List<String> visitedNames = visited.stream().map(Heritage::getName).toList();
         List<String> courseNames = course != null
                 ? course.heritages().stream().map(h -> h.name()).toList()
                 : List.of();
         String summary = visitedNames.isEmpty() ? "" : gmsAiClient.generateTripSummary(visitedNames, courseNames);
+        redisTemplate.opsForValue().set(cacheKey, summary);
 
         return new ReportResponse(tripId, visitedDtos, course, summary);
     }

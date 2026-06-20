@@ -50,6 +50,8 @@ public class RecommendService {
                 .filter(id -> !visitedIds.contains(id))
                 .collect(Collectors.toList());
 
+        if (candidateIds.isEmpty()) return List.of();
+
         Map<Long, String> thumbnails = heritageMapper.findByIds(candidateIds).stream()
                 .collect(Collectors.toMap(Heritage::getId, h -> h.getThumbnailUrl() != null ? h.getThumbnailUrl() : ""));
 

@@ -70,6 +70,9 @@ public class TripController {
             @RequestParam double lat,
             @RequestParam double lng,
             @RequestParam(defaultValue = "5") double radiusKm) {
+        if (lat < -90 || lat > 90) throw new IllegalArgumentException("유효하지 않은 위도입니다. (-90 ~ 90)");
+        if (lng < -180 || lng > 180) throw new IllegalArgumentException("유효하지 않은 경도입니다. (-180 ~ 180)");
+        if (radiusKm <= 0) throw new IllegalArgumentException("반경은 0보다 커야 합니다.");
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.ok(recommendService.recommendNearby(tripId, userId, lat, lng, radiusKm));
     }
