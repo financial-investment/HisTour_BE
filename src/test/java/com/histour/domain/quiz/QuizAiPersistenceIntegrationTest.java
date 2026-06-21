@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @MybatisTest(properties = {
         "spring.datasource.url=jdbc:mysql://localhost:3306/histour?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul",
         "spring.datasource.username=root",
-        "spring.datasource.password=1234"
+        "spring.datasource.password=${DB_PASSWORD:}"
 })
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class QuizAiPersistenceIntegrationTest {

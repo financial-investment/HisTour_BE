@@ -48,7 +48,11 @@ public class QuizService {
     private final PlatformTransactionManager transactionManager;
 
     public QuizSessionResponse createSession(Long userId, QuizSessionCreateRequest request) {
-        validateTripOwner(request.tripId(), userId);
+        Trip trip = validateTripOwnerAndGetTrip(userId, request.tripId());
+
+        if (!"COMPLETED".equals(trip.getStatus())) {
+            throw new IllegalStateException("완료된 여행에만 퀴즈를 생성할 수 있습니다.");
+        }
 
         List<QuizSessionQuestion> existingQuestions = quizMapper.findSessionQuestionsByTripId(request.tripId());
         if (!existingQuestions.isEmpty()) {
@@ -201,6 +205,17 @@ public class QuizService {
         if (!Objects.equals(trip.getUserId(), userId)) {
             throw new AccessDeniedException("해당 여행에 접근할 수 없습니다.");
         }
+    }
+
+    private Trip validateTripOwnerAndGetTrip(Long userId, Long tripId) {
+        Trip trip = tripMapper.findTripById(tripId);
+        if (trip == null) {
+            throw new NoSuchElementException("여행을 찾을 수 없습니다.");
+        }
+        if (!Objects.equals(trip.getUserId(), userId)) {
+            throw new AccessDeniedException("해당 여행에 접근할 수 없습니다.");
+        }
+        return trip;
     }
 
     private QuizSessionResponse toResponse(Long tripId, List<QuizSessionQuestion> questions) {

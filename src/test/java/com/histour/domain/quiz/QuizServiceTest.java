@@ -170,6 +170,20 @@ class QuizServiceTest {
     }
 
     @Test
+    void createSessionThrowsWhenTripIsNotCompleted() {
+        Long tripId = 1L;
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID, "IN_PROGRESS"));
+
+        assertThatThrownBy(() -> quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("완료된 여행에만 퀴즈를 생성할 수 있습니다.");
+
+        verify(quizMapper, never()).findSessionQuestionsByTripId(any());
+        verify(tripMapper, never()).findVisitLogsByTripId(any());
+        verify(quizMapper, never()).insertSession(any());
+    }
+
+    @Test
     void createSessionThrowsWhenVisitLogsAreEmpty() {
         Long tripId = 1L;
         when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
@@ -361,9 +375,14 @@ class QuizServiceTest {
     }
 
     private Trip trip(Long tripId, Long userId) {
+        return trip(tripId, userId, "COMPLETED");
+    }
+
+    private Trip trip(Long tripId, Long userId, String status) {
         return Trip.builder()
                 .id(tripId)
                 .userId(userId)
+                .status(status)
                 .build();
     }
 
