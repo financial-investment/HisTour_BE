@@ -1,6 +1,8 @@
 package com.histour.api.controller;
 
 import com.histour.common.response.ApiResponse;
+import com.histour.domain.report.RecommendService;
+import com.histour.domain.report.dto.RecommendedHeritage;
 import com.histour.domain.trip.TripService;
 import com.histour.domain.trip.dto.TripCreateRequest;
 import com.histour.domain.trip.dto.TripResponse;
@@ -21,6 +23,7 @@ import java.util.List;
 public class TripController {
 
     private final TripService tripService;
+    private final RecommendService recommendService;
 
     @Operation(summary = "내 여행 목록", description = "로그인한 사용자의 여행 목록을 최신순으로 반환합니다.")
     @GetMapping
@@ -56,5 +59,21 @@ public class TripController {
             @PathVariable Long tripId) {
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.ok(tripService.getTrip(tripId, userId));
+    }
+
+    @Operation(summary = "진행 중 다음 문화재 추천",
+               description = "방문 이력 기반 임베딩 유사도 + 현재 위치 반경 내 미방문 문화재를 추천합니다.")
+    @GetMapping("/{tripId}/recommend/next")
+    public ApiResponse<List<RecommendedHeritage>> recommendNext(
+            Authentication authentication,
+            @PathVariable Long tripId,
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "5") double radiusKm) {
+        if (lat < -90 || lat > 90) throw new IllegalArgumentException("유효하지 않은 위도입니다. (-90 ~ 90)");
+        if (lng < -180 || lng > 180) throw new IllegalArgumentException("유효하지 않은 경도입니다. (-180 ~ 180)");
+        if (radiusKm <= 0) throw new IllegalArgumentException("반경은 0보다 커야 합니다.");
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(recommendService.recommendNearby(tripId, userId, lat, lng, radiusKm));
     }
 }

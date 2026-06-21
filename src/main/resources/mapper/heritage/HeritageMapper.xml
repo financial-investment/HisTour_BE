@@ -55,14 +55,52 @@
         WHERE id = #{id}
     </select>
 
+    <select id="findOfficialDescription" resultType="com.histour.domain.heritage.entity.HeritageDescription">
+        SELECT id, heritage_id, content, depth_level, topic, parent_id, source
+        FROM heritage_descriptions
+        WHERE heritage_id = #{heritageId}
+          AND source = 'OFFICIAL'
+          AND depth_level = 1
+        LIMIT 1
+    </select>
+
     <select id="findAiDescription" resultType="com.histour.domain.heritage.entity.HeritageDescription">
         SELECT id, heritage_id, content, depth_level, topic, parent_id, source
         FROM heritage_descriptions
         WHERE heritage_id = #{heritageId}
           AND source = 'AI_GENERATED'
           AND depth_level = #{depthLevel}
+          AND topic = #{topic}
         ORDER BY id DESC
         LIMIT 1
+    </select>
+
+    <select id="findByIds" resultType="com.histour.domain.heritage.entity.Heritage">
+        SELECT id, name, name_hanja, category, period,
+               ST_Latitude(location) AS lat, ST_Longitude(location) AS lng,
+               thumbnail_url
+        FROM heritage
+        WHERE id IN
+        <foreach item="id" collection="ids" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <select id="findAllForEmbedding" resultType="com.histour.domain.heritage.entity.Heritage">
+        SELECT id, name, name_hanja, category, period,
+               ST_Latitude(location) AS lat, ST_Longitude(location) AS lng,
+               ccba_ctcd
+        FROM heritage
+        ORDER BY id
+    </select>
+
+    <select id="findVisitedByTripId" resultType="com.histour.domain.heritage.entity.Heritage">
+        SELECT DISTINCT h.id, h.name, h.category, h.period,
+               ST_Latitude(h.location) AS lat, ST_Longitude(h.location) AS lng,
+               h.ccba_ctcd, h.thumbnail_url
+        FROM heritage h
+        JOIN visit_logs v ON h.id = v.heritage_id
+        WHERE v.trip_id = #{tripId}
     </select>
 
     <select id="findNearby" resultType="com.histour.domain.heritage.entity.Heritage">

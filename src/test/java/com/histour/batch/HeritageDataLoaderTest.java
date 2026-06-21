@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -30,6 +31,12 @@ class HeritageDataLoaderTest {
 
     @InjectMocks
     private HeritageDataLoader loader;
+
+    @BeforeEach
+    void setUp() {
+        // @Value 필드는 @InjectMocks로 주입되지 않으므로 직접 설정
+        ReflectionTestUtils.setField(loader, "filterCtcd", "");
+    }
 
     @Nested
     @DisplayName("시대 매핑 - mapPeriod()")
@@ -208,13 +215,24 @@ class HeritageDataLoaderTest {
     class LoaderBehaviorTest {
 
         @Test
-        @DisplayName("데이터가 이미 있으면 적재 건너뜀")
-        void 데이터_이미_존재시_스킵() throws Exception {
-            when(heritageMapper.count()).thenReturn(1);
+        @DisplayName("이미 적재된 항목은 insert 건너뜀 (per-item 중복 체크)")
+        void 이미_존재하는_항목_스킵() throws Exception {
+            // loader는 count()가 아닌 findIdByCode()로 per-item 중복 체크함
+            HeritageApiClient.ListItem item = new HeritageApiClient.ListItem();
+            item.setCcbaKdcd("11");
+            item.setCcbaAsno("1234567890123");
+            item.setCcbaCtcd("11");
+            item.setCcbaMnm1("경복궁");
+
+            when(apiClient.fetchList(eq("11"), any(), eq(1))).thenReturn(List.of(item));
+            when(heritageMapper.findIdByCode(any(), any(), any())).thenReturn(1L); // 이미 존재
+            for (String kdcd : new String[]{"12","13","14","15","16","21","23","24"}) {
+                when(apiClient.fetchList(eq(kdcd), any(), eq(1))).thenReturn(Collections.emptyList());
+            }
 
             loader.run(null);
 
-            verify(apiClient, never()).fetchList(anyString(), any(), anyInt());
+            verify(heritageMapper, never()).insert(any());
         }
 
         @Test
@@ -228,13 +246,8 @@ class HeritageDataLoaderTest {
             item.setLatitude(null);
             item.setLongitude(null);
 
-            HeritageApiClient.DetailItem detail = new HeritageApiClient.DetailItem();
-            detail.setCcbaCndt("조선시대");
-
-            when(heritageMapper.count()).thenReturn(0);
             when(apiClient.fetchList(eq("11"), any(), eq(1))).thenReturn(List.of(item));
-            when(apiClient.fetchDetail(any(), any(), any())).thenReturn(detail);
-            when(apiClient.fetchLocation(any(), any(), any())).thenReturn(null);
+            // fetchDetail, fetchLocation 기본값(null) → 위치 정보 없음으로 처리됨
             for (String kdcd : new String[]{"12","13","14","15","16","21","23","24"}) {
                 when(apiClient.fetchList(eq(kdcd), any(), eq(1))).thenReturn(Collections.emptyList());
             }
@@ -264,11 +277,11 @@ class HeritageDataLoaderTest {
             img.setImageUrl("http://example.com/img1.jpg");
             img.setCcimDesc("정면 전경");
 
-            when(heritageMapper.count()).thenReturn(0);
             when(apiClient.fetchList(eq("11"), any(), eq(1))).thenReturn(List.of(item));
             when(apiClient.fetchDetail(any(), any(), any())).thenReturn(detail);
             when(apiClient.fetchImages(any(), any(), any())).thenReturn(List.of(img));
-            when(heritageMapper.findIdByCode(any(), any(), any())).thenReturn(1L);
+            // 첫 호출: 존재 여부 체크 → null(신규), 두 번째 호출: insert 후 ID 조회 → 1L
+            when(heritageMapper.findIdByCode(any(), any(), any())).thenReturn(null, 1L);
             for (String kdcd : new String[]{"12","13","14","15","16","21","23","24"}) {
                 when(apiClient.fetchList(eq(kdcd), any(), eq(1))).thenReturn(Collections.emptyList());
             }
@@ -302,11 +315,11 @@ class HeritageDataLoaderTest {
                 images.add(img);
             }
 
-            when(heritageMapper.count()).thenReturn(0);
             when(apiClient.fetchList(eq("11"), any(), eq(1))).thenReturn(List.of(item));
             when(apiClient.fetchDetail(any(), any(), any())).thenReturn(detail);
             when(apiClient.fetchImages(any(), any(), any())).thenReturn(images);
-            when(heritageMapper.findIdByCode(any(), any(), any())).thenReturn(1L);
+            // 첫 호출: 존재 여부 체크 → null(신규), 두 번째 호출: insert 후 ID 조회 → 1L
+            when(heritageMapper.findIdByCode(any(), any(), any())).thenReturn(null, 1L);
             for (String kdcd : new String[]{"12","13","14","15","16","21","23","24"}) {
                 when(apiClient.fetchList(eq(kdcd), any(), eq(1))).thenReturn(Collections.emptyList());
             }

@@ -35,6 +35,9 @@ build/
 ### VS Code ###
 .vscode/
 
+### Uploads ###
+uploads/
+
 ### Secrets ###
 src/main/resources/application-local.yaml
 src/main/resources/application-prod.yaml

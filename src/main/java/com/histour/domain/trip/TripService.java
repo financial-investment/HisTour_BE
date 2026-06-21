@@ -4,7 +4,11 @@ import com.histour.domain.trip.dto.TripCreateRequest;
 import com.histour.domain.trip.dto.TripResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.histour.common.exception.ForbiddenException;
+
+import java.time.LocalDate;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -14,32 +18,33 @@ public class TripService {
 
     private final TripMapper tripMapper;
 
+    @Transactional(readOnly = true)
     public List<TripResponse> getMyTrips(Long userId) {
         return tripMapper.findTripsByUserId(userId).stream()
-                .map(t -> TripResponse.builder()
-                        .tripId(t.getId())
-                        .title(t.getTitle())
-                        .tripDate(t.getTripDate())
-                        .status(t.getStatus())
-                        .createdAt(t.getCreatedAt())
-                        .visitCount(t.getVisitCount())
-                        .build())
+                .map(t -> new TripResponse(
+                        t.getId(), t.getTitle(), t.getTripDate(),
+                        t.getStatus(), t.getCreatedAt(), t.getVisitCount(), null))
                 .toList();
     }
 
+    @Transactional
     public Long createTrip(Long userId, TripCreateRequest request) {
         if (tripMapper.countInProgressByUserId(userId) > 0) {
             throw new IllegalStateException("이미 진행 중인 여행이 있습니다.");
         }
+        LocalDate today = LocalDate.now();
         Trip trip = Trip.builder()
                 .userId(userId)
-                .title(request.title())
-                .tripDate(request.tripDate())
+                .title(request.title() != null && !request.title().isBlank()
+                        ? request.title()
+                        : today + " 역사 여행")
+                .tripDate(request.tripDate() != null ? request.tripDate() : today)
                 .build();
         tripMapper.insertTrip(trip);
         return trip.getId();
     }
 
+    @Transactional
     public void completeTrip(Long tripId, Long userId) {
         Trip trip = findAndValidateOwner(tripId, userId);
         if ("COMPLETED".equals(trip.getStatus())) {
@@ -48,18 +53,13 @@ public class TripService {
         tripMapper.updateTripStatus(tripId, "COMPLETED");
     }
 
+    @Transactional(readOnly = true)
     public TripResponse getTrip(Long tripId, Long userId) {
         Trip trip = findAndValidateOwner(tripId, userId);
         List<VisitLog> visitLogs = tripMapper.findVisitLogsByTripId(tripId);
-        return TripResponse.builder()
-                .tripId(trip.getId())
-                .title(trip.getTitle())
-                .tripDate(trip.getTripDate())
-                .status(trip.getStatus())
-                .createdAt(trip.getCreatedAt())
-                .visitCount(visitLogs.size())
-                .visitLogs(visitLogs)
-                .build();
+        return new TripResponse(
+                trip.getId(), trip.getTitle(), trip.getTripDate(),
+                trip.getStatus(), trip.getCreatedAt(), visitLogs.size(), visitLogs);
     }
 
     private Trip findAndValidateOwner(Long tripId, Long userId) {
@@ -68,7 +68,7 @@ public class TripService {
             throw new NoSuchElementException("여행을 찾을 수 없습니다.");
         }
         if (!trip.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("접근 권한이 없습니다.");
+            throw new ForbiddenException("접근 권한이 없습니다.");
         }
         return trip;
     }
