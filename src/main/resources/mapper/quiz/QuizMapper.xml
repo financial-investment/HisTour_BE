@@ -3,4 +3,94 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.histour.domain.quiz.QuizMapper">
 
+    <select id="findQuizzesByHeritageIds" resultType="com.histour.domain.quiz.entity.Quiz">
+        SELECT q.id, q.heritage_id, h.name AS heritage_name, q.title, q.content,
+               q.correct_answer, q.explanation, q.source, q.difficulty, q.created_at
+        FROM quiz q
+        JOIN heritage h ON q.heritage_id = h.id
+        WHERE q.heritage_id IN
+        <foreach collection="heritageIds" item="heritageId" open="(" separator="," close=")">
+            #{heritageId}
+        </foreach>
+        ORDER BY q.source = 'PAST_EXAM' DESC, q.id DESC
+    </select>
+
+    <insert id="insertQuiz" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO quiz (heritage_id, title, content, correct_answer, explanation, source, difficulty, created_at)
+        VALUES (#{heritageId}, #{title}, #{content}, #{correctAnswer}, #{explanation}, #{source}, #{difficulty}, NOW())
+    </insert>
+
+    <insert id="insertChoice" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO quiz_choices (quiz_id, content, is_correct)
+        VALUES (#{quizId}, #{content}, #{correct})
+    </insert>
+
+    <insert id="insertSession" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO quiz_sessions (trip_id, quiz_id, sort_order, status, created_at)
+        VALUES (#{tripId}, #{quizId}, #{sortOrder}, #{status}, NOW())
+    </insert>
+
+    <select id="findSessionQuestionsByTripId" resultType="com.histour.domain.quiz.entity.QuizSessionQuestion">
+        SELECT s.id AS session_id, s.trip_id, s.quiz_id,
+               q.heritage_id, h.name AS heritage_name,
+               q.title, q.content, q.explanation, q.source, q.difficulty,
+               s.sort_order
+        FROM quiz_sessions s
+        JOIN quiz q ON s.quiz_id = q.id
+        JOIN heritage h ON q.heritage_id = h.id
+        WHERE s.trip_id = #{tripId}
+        ORDER BY s.sort_order
+    </select>
+
+    <select id="findSessionQuestionBySessionId" resultType="com.histour.domain.quiz.entity.QuizSessionQuestion">
+        SELECT s.id AS session_id, s.trip_id, s.quiz_id,
+               q.heritage_id, h.name AS heritage_name,
+               q.title, q.content, q.explanation, q.source, q.difficulty,
+               s.sort_order
+        FROM quiz_sessions s
+        JOIN quiz q ON s.quiz_id = q.id
+        JOIN heritage h ON q.heritage_id = h.id
+        WHERE s.id = #{sessionId}
+    </select>
+
+    <select id="findChoicesByQuizIds" resultType="com.histour.domain.quiz.entity.QuizChoice">
+        SELECT id, quiz_id, content, is_correct AS correct
+        FROM quiz_choices
+        WHERE quiz_id IN
+        <foreach collection="quizIds" item="quizId" open="(" separator="," close=")">
+            #{quizId}
+        </foreach>
+        ORDER BY id
+    </select>
+
+    <select id="findChoiceById" resultType="com.histour.domain.quiz.entity.QuizChoice">
+        SELECT id, quiz_id, content, is_correct AS correct
+        FROM quiz_choices
+        WHERE id = #{choiceId}
+    </select>
+
+    <select id="findCorrectChoiceByQuizId" resultType="com.histour.domain.quiz.entity.QuizChoice">
+        SELECT id, quiz_id, content, is_correct AS correct
+        FROM quiz_choices
+        WHERE quiz_id = #{quizId}
+          AND is_correct = TRUE
+        LIMIT 1
+    </select>
+
+    <select id="findResultBySessionId" resultType="com.histour.domain.quiz.entity.QuizResult">
+        SELECT id, quiz_session_id, selected_choice_id, is_correct AS correct, answered_at
+        FROM quiz_results
+        WHERE quiz_session_id = #{sessionId}
+    </select>
+
+    <insert id="insertResult" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO quiz_results (quiz_session_id, selected_choice_id, is_correct, answered_at)
+        VALUES (#{quizSessionId}, #{selectedChoiceId}, #{correct}, NOW())
+    </insert>
+
+    <update id="updateSessionStatus">
+        UPDATE quiz_sessions
+        SET status = #{status}
+        WHERE id = #{sessionId}
+    </update>
 </mapper>

@@ -29,12 +29,13 @@ src/main/java/com/histour/
 │   ├── HeritageController.java   # 문화재 해설 API (구현 완료)
 │   ├── UserController.java       # 회원가입/조회 (구현 완료)
 │   ├── TripController.java       # 여행 관리 (구현 완료)
-│   ├── QuizController.java       # 퀴즈 (미구현)
+│   ├── QuizController.java       # 여행 후 퀴즈 생성/채점 (구현 완료)
 │   └── ReportController.java     # 리포트 (미구현)
 ├── batch/
 │   └── HeritageDataLoader.java   # 국가유산청 데이터 1회성 적재 (enabled: false)
 ├── client/
 │   ├── GmsAiClient.java          # GMS AI 호출 (gpt-4o + Claude Haiku)
+│   ├── QuizAiClient.java         # 퀴즈 생성용 GMS Claude 호출
 │   └── HeritageApiClient.java    # 국가유산청 Open API 클라이언트
 ├── config/
 │   ├── SecurityConfig.java       # JWT 필터, /api/auth/** · /api/user(POST) · swagger 제외 인증 필요
@@ -46,7 +47,7 @@ src/main/java/com/histour/
 │   ├── heritage/                 # 문화재 도메인 (구현 완료)
 │   ├── trip/                     # 여행·방문기록 도메인 (구현 완료)
 │   ├── user/                     # 사용자 도메인 (구현 완료)
-│   ├── quiz/                     # 퀴즈 (미구현)
+│   ├── quiz/                     # 여행 후 퀴즈 도메인 (구현 완료)
 │   └── report/                   # 리포트 (미구현)
 └── common/
     ├── exception/GlobalExceptionHandler.java
@@ -102,6 +103,7 @@ heritage:
 
 - 서버 기본 포트: `http://localhost:8080`
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
+- Swagger UI 우측 상단 `Authorize`에서 access token을 입력하면 JWT 인증 API를 호출할 수 있습니다. `Bearer` 접두사는 입력하지 않아도 됩니다.
 
 ---
 
@@ -122,14 +124,15 @@ heritage:
 | POST | `/api/trip` | 여행 생성 (IN_PROGRESS 여행 중복 불가) |
 | GET | `/api/trip/{tripId}` | 여행 상세 + 방문 기록 목록 |
 | PATCH | `/api/trip/{tripId}/complete` | 여행 완료 처리 |
+| POST | `/api/quiz/sessions` | 여행 방문 기록 기반 퀴즈 10개 생성/조회 |
+| GET | `/api/quiz/sessions?tripId={tripId}` | 생성된 퀴즈 세션 조회 |
+| POST | `/api/quiz/results` | 퀴즈 답안 제출 및 채점 결과 저장 |
 
 ### 미구현
 
 | Method | URL | 설명 |
 |---|---|---|
 | GET | `/api/trip/{tripId}/recommend/next` | 진행 중 다음 문화재 추천 |
-| GET | `/api/quiz/generate` | 여행 기반 퀴즈 생성 |
-| POST | `/api/quiz/result` | 퀴즈 결과 저장 |
 | GET | `/api/report/{tripId}` | 여행 리포트 + 완료 후 추천 |
 
 ---
@@ -246,6 +249,99 @@ heritage:
 **여행 완료** `PATCH /api/trip/{tripId}/complete`
 
 - 이미 COMPLETED 상태면 `400` 반환
+- 클라이언트는 여행 완료 성공 후 `POST /api/quiz/sessions`에 같은 `tripId`를 전달해 오늘의 퀴즈를 생성합니다.
+
+---
+
+### Quiz API 상세
+
+여행 완료 후 클라이언트가 `tripId`를 전달하면, 서버는 해당 여행의 `visit_logs`를 기준으로 방문 유적지와 연결된 문제를 10개 구성합니다. 기존 `quiz` 문제가 부족하면 `QuizAiClient`가 GMS Claude API를 호출해 부족분을 생성하고, 생성된 문제와 객관식 선택지를 각각 `quiz`, `quiz_choices`에 저장합니다.
+
+**퀴즈 세션 생성** `POST /api/quiz/sessions`
+
+```json
+// Request
+{
+  "tripId": 1
+}
+```
+
+```json
+// Response
+{
+  "success": true,
+  "data": {
+    "tripId": 1,
+    "totalCount": 10,
+    "questions": [
+      {
+        "sessionId": 10,
+        "quizId": 100,
+        "heritageId": 1,
+        "heritageName": "서울 숭례문",
+        "title": "숭례문 복습",
+        "content": "다음 중 숭례문에 대한 설명으로 옳은 것은?",
+        "source": "AI_GENERATED",
+        "difficulty": "MEDIUM",
+        "sortOrder": 1,
+        "choices": [
+          { "choiceId": 1, "content": "조선 시대 도성의 남쪽 문이다." },
+          { "choiceId": 2, "content": "고려 시대 왕궁의 정문이다." }
+        ]
+      }
+    ]
+  }
+}
+```
+
+- 이미 생성된 세션이 있으면 새로 만들지 않고 기존 세션을 반환합니다.
+- 문제 후보는 방문 유적지별로 균형 있게 랜덤 선택합니다.
+- 응답에는 정답 여부와 해설을 포함하지 않습니다.
+- AI 호출은 DB 트랜잭션 밖에서 수행하고, `quiz`, `quiz_choices`, `quiz_sessions` 저장만 짧은 트랜잭션으로 처리합니다.
+
+**퀴즈 세션 조회** `GET /api/quiz/sessions?tripId={tripId}`
+
+- 이미 생성된 퀴즈 문제와 선택지를 다시 조회합니다.
+- 본인 소유의 여행이 아니면 `403` 반환.
+
+**퀴즈 답안 제출** `POST /api/quiz/results`
+
+```json
+// Request
+{
+  "answers": [
+    { "sessionId": 10, "choiceId": 1 },
+    { "sessionId": 11, "choiceId": 5 }
+  ]
+}
+```
+
+```json
+// Response
+{
+  "success": true,
+  "data": {
+    "tripId": 1,
+    "totalCount": 10,
+    "correctCount": 8,
+    "accuracy": 80,
+    "results": [
+      {
+        "sessionId": 10,
+        "quizId": 100,
+        "correct": true,
+        "selectedChoiceId": 1,
+        "correctChoiceId": 1,
+        "explanation": "숭례문은 조선 한양도성의 남대문입니다."
+      }
+    ]
+  }
+}
+```
+
+- `choiceId`가 해당 문제의 선택지인지 검증합니다.
+- 이미 제출된 세션은 중복 제출할 수 없습니다.
+- 채점 결과는 `quiz_results`에 저장하고, `quiz_sessions.status`를 `SUBMITTED`로 변경합니다.
 
 ---
 
@@ -264,6 +360,7 @@ heritage:
 | 200 | 정상 처리 |
 | 201 | 리소스 생성 완료 (여행 생성 등) |
 | 400 | 요청 오류 (문화재 식별 불가, 기본 해설 없음, 중복 여행, 권한 없음 등) |
+| 403 | 소유하지 않은 여행/퀴즈 접근 |
 | 401 | 인증 실패 (토큰 없음 또는 만료) |
 | 404 | 리소스 없음 (반경 내 문화재 없음, ID 미존재 등) |
 | 502 | GMS AI API 호출 실패 |
