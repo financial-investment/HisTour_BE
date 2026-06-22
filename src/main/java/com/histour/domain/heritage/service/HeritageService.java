@@ -6,6 +6,7 @@ import com.histour.common.exception.ForbiddenException;
 import com.histour.domain.heritage.dto.ExplainRequest;
 import com.histour.domain.heritage.dto.ExplainResponse;
 import com.histour.domain.heritage.dto.ExplainTopic;
+import com.histour.domain.heritage.dto.HeritageCategoryStats;
 import com.histour.domain.heritage.dto.HeritageDetailResponse;
 import com.histour.domain.heritage.entity.HeritageMedia;
 import com.histour.domain.heritage.entity.Heritage;
@@ -105,6 +106,10 @@ public class HeritageService {
         }
 
         return new ExplainResponse(identified.getId(), identified.getName(), explanation, visitLogId);
+    }
+
+    public List<HeritageCategoryStats> getCategoryStats() {
+        return heritageMapper.countByCategory();
     }
 
     public HeritageDetailResponse getDetail(Long heritageId) {
