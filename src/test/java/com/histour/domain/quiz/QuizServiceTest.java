@@ -11,6 +11,7 @@ import com.histour.domain.quiz.dto.QuizSessionResponse;
 import com.histour.domain.quiz.entity.QuizResult;
 import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
+import com.histour.domain.quiz.entity.QuizGradingRow;
 import com.histour.domain.quiz.entity.QuizSession;
 import com.histour.domain.quiz.entity.QuizSessionQuestion;
 import com.histour.domain.trip.Trip;
@@ -295,18 +296,15 @@ class QuizServiceTest {
     @Test
     void submitResultsGradesAndStoresAnswers() {
         Long tripId = 1L;
-        when(quizMapper.findSessionQuestionBySessionId(10L)).thenReturn(
-                sessionQuestion(10L, tripId, 100L, 1L, "서울 숭례문", 1)
-        );
-        when(quizMapper.findSessionQuestionBySessionId(11L)).thenReturn(
-                sessionQuestion(11L, tripId, 101L, 1L, "서울 숭례문", 2)
-        );
+        when(quizMapper.findGradingRowsBySessionIds(List.of(10L, 11L))).thenReturn(List.of(
+                gradingRow(10L, tripId, 100L, null, 1L),
+                gradingRow(11L, tripId, 101L, null, 4L)
+        ));
+        when(quizMapper.findChoicesByIds(List.of(1L, 5L))).thenReturn(List.of(
+                choice(1L, 100L, "정답", true),
+                choice(5L, 101L, "오답", false)
+        ));
         when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
-        when(quizMapper.findResultBySessionId(any())).thenReturn(null);
-        when(quizMapper.findChoiceById(1L)).thenReturn(choice(1L, 100L, "정답", true));
-        when(quizMapper.findChoiceById(5L)).thenReturn(choice(5L, 101L, "오답", false));
-        when(quizMapper.findCorrectChoiceByQuizId(100L)).thenReturn(choice(1L, 100L, "정답", true));
-        when(quizMapper.findCorrectChoiceByQuizId(101L)).thenReturn(choice(4L, 101L, "정답", true));
 
         QuizResultResponse response = quizService.submitResults(USER_ID, new QuizResultSubmitRequest(List.of(
                 new QuizAnswerSubmitRequest(10L, 1L),
@@ -334,14 +332,72 @@ class QuizServiceTest {
     }
 
     @Test
+    void submitResultsUsesBatchQueriesForTenAnswers() {
+        Long tripId = 1L;
+        List<Long> sessionIds = List.of(10L, 11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L);
+        List<Long> choiceIds = List.of(1000L, 1001L, 1002L, 1003L, 1004L, 1005L, 1006L, 1007L, 1008L, 1009L);
+        when(quizMapper.findGradingRowsBySessionIds(sessionIds)).thenReturn(List.of(
+                gradingRow(10L, tripId, 100L, null, 1000L),
+                gradingRow(11L, tripId, 101L, null, 1001L),
+                gradingRow(12L, tripId, 102L, null, 1002L),
+                gradingRow(13L, tripId, 103L, null, 1003L),
+                gradingRow(14L, tripId, 104L, null, 1004L),
+                gradingRow(15L, tripId, 105L, null, 1005L),
+                gradingRow(16L, tripId, 106L, null, 1006L),
+                gradingRow(17L, tripId, 107L, null, 1007L),
+                gradingRow(18L, tripId, 108L, null, 1008L),
+                gradingRow(19L, tripId, 109L, null, 1009L)
+        ));
+        when(quizMapper.findChoicesByIds(choiceIds)).thenReturn(List.of(
+                choice(1000L, 100L, "선택지 1", true),
+                choice(1001L, 101L, "선택지 2", true),
+                choice(1002L, 102L, "선택지 3", true),
+                choice(1003L, 103L, "선택지 4", true),
+                choice(1004L, 104L, "선택지 5", true),
+                choice(1005L, 105L, "선택지 6", true),
+                choice(1006L, 106L, "선택지 7", true),
+                choice(1007L, 107L, "선택지 8", true),
+                choice(1008L, 108L, "선택지 9", true),
+                choice(1009L, 109L, "선택지 10", true)
+        ));
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
+
+        QuizResultResponse response = quizService.submitResults(USER_ID, new QuizResultSubmitRequest(List.of(
+                new QuizAnswerSubmitRequest(10L, 1000L),
+                new QuizAnswerSubmitRequest(11L, 1001L),
+                new QuizAnswerSubmitRequest(12L, 1002L),
+                new QuizAnswerSubmitRequest(13L, 1003L),
+                new QuizAnswerSubmitRequest(14L, 1004L),
+                new QuizAnswerSubmitRequest(15L, 1005L),
+                new QuizAnswerSubmitRequest(16L, 1006L),
+                new QuizAnswerSubmitRequest(17L, 1007L),
+                new QuizAnswerSubmitRequest(18L, 1008L),
+                new QuizAnswerSubmitRequest(19L, 1009L)
+        )));
+
+        assertThat(response.totalCount()).isEqualTo(10);
+        assertThat(response.correctCount()).isEqualTo(10);
+        verify(quizMapper, times(1)).findGradingRowsBySessionIds(sessionIds);
+        verify(quizMapper, times(1)).findChoicesByIds(choiceIds);
+        verify(tripMapper, times(1)).findTripById(tripId);
+        verify(quizMapper, times(10)).insertResult(any(QuizResult.class));
+        verify(quizMapper, times(10)).updateSessionStatus(any(), eq("SUBMITTED"));
+        verify(quizMapper, never()).findSessionQuestionBySessionId(any());
+        verify(quizMapper, never()).findResultBySessionId(any());
+        verify(quizMapper, never()).findChoiceById(any());
+        verify(quizMapper, never()).findCorrectChoiceByQuizId(any());
+    }
+
+    @Test
     void submitResultsThrowsWhenChoiceDoesNotBelongToQuiz() {
         Long tripId = 1L;
-        when(quizMapper.findSessionQuestionBySessionId(10L)).thenReturn(
-                sessionQuestion(10L, tripId, 100L, 1L, "서울 숭례문", 1)
-        );
+        when(quizMapper.findGradingRowsBySessionIds(List.of(10L))).thenReturn(List.of(
+                gradingRow(10L, tripId, 100L, null, 4L)
+        ));
+        when(quizMapper.findChoicesByIds(List.of(1L))).thenReturn(List.of(
+                choice(1L, 999L, "다른 문제 선택지", false)
+        ));
         when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
-        when(quizMapper.findResultBySessionId(10L)).thenReturn(null);
-        when(quizMapper.findChoiceById(1L)).thenReturn(choice(1L, 999L, "다른 문제 선택지", false));
 
         assertThatThrownBy(() -> quizService.submitResults(USER_ID, new QuizResultSubmitRequest(List.of(
                 new QuizAnswerSubmitRequest(10L, 1L)
@@ -371,6 +427,21 @@ class QuizServiceTest {
                 .source("AI_GENERATED")
                 .difficulty("MEDIUM")
                 .sortOrder(sortOrder)
+                .build();
+    }
+
+    private QuizGradingRow gradingRow(Long sessionId,
+                                      Long tripId,
+                                      Long quizId,
+                                      Long existingResultId,
+                                      Long correctChoiceId) {
+        return QuizGradingRow.builder()
+                .sessionId(sessionId)
+                .tripId(tripId)
+                .quizId(quizId)
+                .explanation("퀴즈 해설")
+                .existingResultId(existingResultId)
+                .correctChoiceId(correctChoiceId)
                 .build();
     }
 

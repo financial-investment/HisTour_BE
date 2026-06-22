@@ -2,6 +2,7 @@ package com.histour.domain.quiz;
 
 import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
+import com.histour.domain.quiz.entity.QuizGradingRow;
 import com.histour.domain.quiz.entity.QuizResult;
 import com.histour.domain.quiz.entity.QuizSession;
 import com.histour.domain.quiz.entity.QuizSessionQuestion;
@@ -116,8 +117,18 @@ class QuizMapperTest {
 
         List<QuizChoice> choices = quizMapper.findChoicesByQuizIds(List.of(quiz.getId()));
         assertThat(choices).hasSize(2);
+        assertThat(quizMapper.findChoicesByIds(List.of(correctChoice.getId(), wrongChoice.getId())))
+                .extracting(QuizChoice::getId)
+                .containsExactlyInAnyOrder(correctChoice.getId(), wrongChoice.getId());
         assertThat(quizMapper.findChoiceById(correctChoice.getId()).isCorrect()).isTrue();
         assertThat(quizMapper.findCorrectChoiceByQuizId(quiz.getId()).getId()).isEqualTo(correctChoice.getId());
+
+        List<QuizGradingRow> gradingRowsBeforeSubmit = quizMapper.findGradingRowsBySessionIds(List.of(session.getId()));
+        assertThat(gradingRowsBeforeSubmit).hasSize(1);
+        assertThat(gradingRowsBeforeSubmit.getFirst().getSessionId()).isEqualTo(session.getId());
+        assertThat(gradingRowsBeforeSubmit.getFirst().getQuizId()).isEqualTo(quiz.getId());
+        assertThat(gradingRowsBeforeSubmit.getFirst().getCorrectChoiceId()).isEqualTo(correctChoice.getId());
+        assertThat(gradingRowsBeforeSubmit.getFirst().getExistingResultId()).isNull();
 
         QuizResult result = QuizResult.builder()
                 .quizSessionId(session.getId())
@@ -130,6 +141,9 @@ class QuizMapperTest {
         assertThat(savedResult.getId()).isEqualTo(result.getId());
         assertThat(savedResult.getSelectedChoiceId()).isEqualTo(correctChoice.getId());
         assertThat(savedResult.isCorrect()).isTrue();
+
+        List<QuizGradingRow> gradingRowsAfterSubmit = quizMapper.findGradingRowsBySessionIds(List.of(session.getId()));
+        assertThat(gradingRowsAfterSubmit.getFirst().getExistingResultId()).isEqualTo(result.getId());
 
         quizMapper.updateSessionStatus(session.getId(), "SUBMITTED");
         String status = jdbcTemplate.queryForObject(

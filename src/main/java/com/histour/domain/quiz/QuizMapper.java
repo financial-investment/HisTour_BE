@@ -2,6 +2,7 @@ package com.histour.domain.quiz;
 
 import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
+import com.histour.domain.quiz.entity.QuizGradingRow;
 import com.histour.domain.quiz.entity.QuizResult;
 import com.histour.domain.quiz.entity.QuizSession;
 import com.histour.domain.quiz.entity.QuizSessionQuestion;
@@ -25,6 +26,10 @@ public interface QuizMapper {
     QuizSessionQuestion findSessionQuestionBySessionId(@Param("sessionId") Long sessionId);
 
     List<QuizChoice> findChoicesByQuizIds(@Param("quizIds") List<Long> quizIds);
+
+    List<QuizGradingRow> findGradingRowsBySessionIds(@Param("sessionIds") List<Long> sessionIds);
+
+    List<QuizChoice> findChoicesByIds(@Param("choiceIds") List<Long> choiceIds);
 
     QuizChoice findChoiceById(@Param("choiceId") Long choiceId);
 

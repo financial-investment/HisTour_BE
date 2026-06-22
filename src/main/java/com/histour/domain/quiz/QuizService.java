@@ -4,6 +4,7 @@ import com.histour.client.QuizAiClient;
 import com.histour.domain.quiz.dto.AiQuizGenerateRequest;
 import com.histour.domain.quiz.dto.AiQuizQuestion;
 import com.histour.domain.quiz.dto.AiVisitedHeritage;
+import com.histour.domain.quiz.dto.QuizAnswerSubmitRequest;
 import com.histour.domain.quiz.dto.QuizChoiceResponse;
 import com.histour.domain.quiz.dto.QuizQuestionResponse;
 import com.histour.domain.quiz.dto.QuizResultItemResponse;
@@ -13,6 +14,7 @@ import com.histour.domain.quiz.dto.QuizSessionCreateRequest;
 import com.histour.domain.quiz.dto.QuizSessionResponse;
 import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
+import com.histour.domain.quiz.entity.QuizGradingRow;
 import com.histour.domain.quiz.entity.QuizResult;
 import com.histour.domain.quiz.entity.QuizSession;
 import com.histour.domain.quiz.entity.QuizSessionQuestion;
@@ -146,44 +148,63 @@ public class QuizService {
     }
 
     private List<PreparedQuizResult> prepareQuizResults(Long userId, QuizResultSubmitRequest request) {
+        List<Long> sessionIds = request.answers().stream()
+                .map(QuizAnswerSubmitRequest::sessionId)
+                .distinct()
+                .toList();
+        if (sessionIds.size() != request.answers().size()) {
+            throw new IllegalArgumentException("중복된 퀴즈 답안이 있습니다.");
+        }
+
+        List<Long> choiceIds = request.answers().stream()
+                .map(QuizAnswerSubmitRequest::choiceId)
+                .distinct()
+                .toList();
+
+        Map<Long, QuizGradingRow> gradingRowBySessionId = quizMapper.findGradingRowsBySessionIds(sessionIds)
+                .stream()
+                .collect(Collectors.toMap(QuizGradingRow::getSessionId, row -> row));
+        Map<Long, QuizChoice> selectedChoiceById = quizMapper.findChoicesByIds(choiceIds)
+                .stream()
+                .collect(Collectors.toMap(QuizChoice::getId, choice -> choice));
+
         List<PreparedQuizResult> preparedResults = new ArrayList<>();
         Long targetTripId = null;
 
         for (var answer : request.answers()) {
-            QuizSessionQuestion sessionQuestion = quizMapper.findSessionQuestionBySessionId(answer.sessionId());
-            if (sessionQuestion == null) {
+            QuizGradingRow gradingRow = gradingRowBySessionId.get(answer.sessionId());
+            if (gradingRow == null) {
                 throw new NoSuchElementException("퀴즈 세션을 찾을 수 없습니다.");
             }
             if (targetTripId == null) {
-                targetTripId = sessionQuestion.getTripId();
+                targetTripId = gradingRow.getTripId();
                 validateTripOwner(targetTripId, userId);
-            } else if (!Objects.equals(targetTripId, sessionQuestion.getTripId())) {
+            } else if (!Objects.equals(targetTripId, gradingRow.getTripId())) {
                 throw new IllegalArgumentException("하나의 여행에 속한 답안만 제출할 수 있습니다.");
             }
 
-            if (quizMapper.findResultBySessionId(answer.sessionId()) != null) {
+            if (gradingRow.getExistingResultId() != null) {
                 throw new IllegalStateException("이미 제출된 퀴즈입니다.");
             }
 
-            QuizChoice selectedChoice = quizMapper.findChoiceById(answer.choiceId());
-            if (selectedChoice == null || !Objects.equals(selectedChoice.getQuizId(), sessionQuestion.getQuizId())) {
+            QuizChoice selectedChoice = selectedChoiceById.get(answer.choiceId());
+            if (selectedChoice == null || !Objects.equals(selectedChoice.getQuizId(), gradingRow.getQuizId())) {
                 throw new IllegalArgumentException("퀴즈에 속하지 않은 선택지입니다.");
             }
 
-            QuizChoice correctChoice = quizMapper.findCorrectChoiceByQuizId(sessionQuestion.getQuizId());
-            if (correctChoice == null) {
+            if (gradingRow.getCorrectChoiceId() == null) {
                 throw new IllegalStateException("정답 선택지가 없습니다.");
             }
 
             preparedResults.add(new PreparedQuizResult(
-                    sessionQuestion.getTripId(),
+                    gradingRow.getTripId(),
                     new QuizResultItemResponse(
                             answer.sessionId(),
-                            sessionQuestion.getQuizId(),
+                            gradingRow.getQuizId(),
                             selectedChoice.isCorrect(),
                             answer.choiceId(),
-                            correctChoice.getId(),
-                            sessionQuestion.getExplanation()
+                            gradingRow.getCorrectChoiceId(),
+                            gradingRow.getExplanation()
                     )
             ));
         }
