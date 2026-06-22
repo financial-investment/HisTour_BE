@@ -36,7 +36,15 @@ public class RecommendService {
         if (!trip.getUserId().equals(userId)) throw new ForbiddenException("접근 권한이 없습니다.");
 
         List<Heritage> visited = heritageMapper.findVisitedByTripId(tripId);
-        if (visited.isEmpty()) return List.of();
+        if (visited.isEmpty()) {
+            return heritageMapper.findNearestByLocation(lat, lng, radiusKm * 1000, 5).stream()
+                    .map(h -> new RecommendedHeritage(
+                            h.getId(), h.getName(),
+                            h.getThumbnailUrl() != null ? h.getThumbnailUrl() : "",
+                            h.getLat(), h.getLng(),
+                            (int) haversineMeters(lat, lng, h.getLat(), h.getLng())))
+                    .collect(Collectors.toList());
+        }
 
         Set<Long> visitedIds = visited.stream().map(Heritage::getId).collect(Collectors.toSet());
 
@@ -46,7 +54,7 @@ public class RecommendService {
             return List.of();
         }
 
-        List<Long> candidateIds = knnSearch(avgVector, 50).stream()
+        List<Long> candidateIds = knnSearch(avgVector, 20).stream()
                 .filter(id -> !visitedIds.contains(id))
                 .collect(Collectors.toList());
 

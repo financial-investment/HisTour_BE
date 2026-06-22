@@ -18,6 +18,8 @@ public interface HeritageMapper {
     Heritage findById(@Param("id") Long id);
     List<Heritage> findByIds(@Param("ids") List<Long> ids);
     List<Heritage> findNearby(@Param("lat") double lat, @Param("lng") double lng);
+    List<Heritage> findNearestByLocation(@Param("lat") double lat, @Param("lng") double lng,
+                                         @Param("radiusM") double radiusM, @Param("limit") int limit);
     List<Heritage> findAllForEmbedding();
     List<Heritage> findVisitedByTripId(@Param("tripId") Long tripId);
     List<HeritageDescription> findDescriptions(@Param("heritageId") Long heritageId);
