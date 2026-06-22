@@ -72,7 +72,8 @@ public class QuizAiClient {
             body.put("system",
                     "당신은 한국사 교육용 퀴즈 출제자입니다. " +
                     "사용자가 방문한 문화재와 현장 해설을 바탕으로 4지선다 복습 퀴즈를 만듭니다. " +
-                    "정답은 반드시 하나여야 하며, 사실 검증이 어려운 내용은 피하세요.");
+                    "정답은 반드시 하나여야 하며, 사실 검증이 어려운 내용은 피하세요." +
+                            "선지는 단답의 명사형태로 해주세요. 특이 기호 (ex: ',' '?' '!' 등)");
 
             StringBuilder prompt = new StringBuilder();
             prompt.append("생성할 문제 수: ").append(request.count()).append("\n\n");
