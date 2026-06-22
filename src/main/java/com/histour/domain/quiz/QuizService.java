@@ -1,6 +1,6 @@
 package com.histour.domain.quiz;
 
-import com.histour.client.QuizAiClient;
+import com.histour.client.GmsAiClient;
 import com.histour.domain.quiz.dto.AiQuizGenerateRequest;
 import com.histour.domain.quiz.dto.AiQuizQuestion;
 import com.histour.domain.quiz.dto.AiVisitedHeritage;
@@ -44,7 +44,7 @@ public class QuizService {
 
     private final QuizMapper quizMapper;
     private final TripMapper tripMapper;
-    private final QuizAiClient quizAiClient;
+    private final GmsAiClient gmsAiClient;
     private final PlatformTransactionManager transactionManager;
 
     public QuizSessionResponse createSession(Long userId, QuizSessionCreateRequest request) {
@@ -266,7 +266,7 @@ public class QuizService {
                         .toList()
         );
 
-        List<AiQuizQuestion> generatedQuestions = quizAiClient.generateQuestions(request);
+        List<AiQuizQuestion> generatedQuestions = gmsAiClient.generateQuestions(request);
         List<AiQuizQuestion> validQuestions = new ArrayList<>();
         for (AiQuizQuestion question : generatedQuestions) {
             if (validQuestions.size() == missingCount) {
