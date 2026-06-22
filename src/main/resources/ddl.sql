@@ -14,8 +14,8 @@ CREATE TABLE users (
 CREATE TABLE trips (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id     BIGINT NOT NULL,
-    title       VARCHAR(255),
-    trip_date   DATE,
+    title       VARCHAR(255) NOT NULL,
+    trip_date   DATE NOT NULL,
     status      ENUM('IN_PROGRESS','COMPLETED') DEFAULT 'IN_PROGRESS',
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
