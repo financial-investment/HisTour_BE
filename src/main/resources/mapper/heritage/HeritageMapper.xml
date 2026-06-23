@@ -11,6 +11,7 @@
         SELECT category, COUNT(*) AS total
         FROM heritage
         WHERE category IS NOT NULL
+          AND TRIM(category) != ''
         GROUP BY category
         ORDER BY total DESC
     </select>

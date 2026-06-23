@@ -1,3 +1,3 @@
 package com.histour.domain.heritage.dto;
 
-public record HeritageCategoryStats(String category, int total) {}
+public record HeritageCategoryStats(String category, long total) {}
