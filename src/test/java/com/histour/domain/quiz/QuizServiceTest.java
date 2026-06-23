@@ -1,6 +1,6 @@
 package com.histour.domain.quiz;
 
-import com.histour.client.QuizAiClient;
+import com.histour.client.GmsAiClient;
 import com.histour.domain.quiz.dto.AiQuizGenerateRequest;
 import com.histour.domain.quiz.dto.AiQuizQuestion;
 import com.histour.domain.quiz.dto.QuizAnswerSubmitRequest;
@@ -9,6 +9,7 @@ import com.histour.domain.quiz.dto.QuizResultSubmitRequest;
 import com.histour.domain.quiz.dto.QuizSessionCreateRequest;
 import com.histour.domain.quiz.dto.QuizSessionResponse;
 import com.histour.domain.quiz.entity.QuizResult;
+import com.histour.domain.quiz.entity.QuizResultRow;
 import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
 import com.histour.domain.quiz.entity.QuizSession;
@@ -48,7 +49,7 @@ class QuizServiceTest {
     private TripMapper tripMapper;
 
     @Mock
-    private QuizAiClient quizAiClient;
+    private GmsAiClient gmsAiClient;
 
     @Mock
     private PlatformTransactionManager transactionManager;
@@ -219,7 +220,7 @@ class QuizServiceTest {
         when(quizMapper.findQuizzesByHeritageIds(List.of(1L))).thenReturn(List.of(
                 quiz(100L, 1L)
         ));
-        when(quizAiClient.generateQuestions(any(AiQuizGenerateRequest.class))).thenReturn(List.of(
+        when(gmsAiClient.generateQuestions(any(AiQuizGenerateRequest.class))).thenReturn(List.of(
                 aiQuestion(1L, 0),
                 aiQuestion(1L, 1),
                 aiQuestion(1L, 2),
@@ -236,7 +237,7 @@ class QuizServiceTest {
         QuizSessionResponse response = quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId));
 
         ArgumentCaptor<AiQuizGenerateRequest> aiRequestCaptor = ArgumentCaptor.forClass(AiQuizGenerateRequest.class);
-        verify(quizAiClient).generateQuestions(aiRequestCaptor.capture());
+        verify(gmsAiClient).generateQuestions(aiRequestCaptor.capture());
         assertThat(aiRequestCaptor.getValue().count()).isEqualTo(9);
         assertThat(aiRequestCaptor.getValue().visitedHeritages())
                 .extracting(visited -> visited.heritageId())
@@ -245,8 +246,8 @@ class QuizServiceTest {
         verify(quizMapper, times(9)).insertQuiz(any(Quiz.class));
         verify(quizMapper, times(36)).insertChoice(any(QuizChoice.class));
         verify(quizMapper, times(10)).insertSession(any(QuizSession.class));
-        InOrder order = inOrder(quizAiClient, transactionManager, quizMapper);
-        order.verify(quizAiClient).generateQuestions(any(AiQuizGenerateRequest.class));
+        InOrder order = inOrder(gmsAiClient, transactionManager, quizMapper);
+        order.verify(gmsAiClient).generateQuestions(any(AiQuizGenerateRequest.class));
         order.verify(transactionManager).getTransaction(any());
         order.verify(quizMapper).insertQuiz(any(Quiz.class));
         assertThat(response.totalCount()).isEqualTo(10);
@@ -353,6 +354,40 @@ class QuizServiceTest {
         verify(quizMapper, never()).updateSessionStatus(any(), any());
     }
 
+    @Test
+    void getResultsByTripIdReturnsStoredResults() {
+        Long tripId = 1L;
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
+        when(quizMapper.findResultRowsByTripId(tripId)).thenReturn(List.of(
+                resultRow(10L, tripId, 100L, true, 1L, 1L),
+                resultRow(11L, tripId, 101L, false, 5L, 4L)
+        ));
+
+        QuizResultResponse response = quizService.getResultsByTripId(USER_ID, tripId);
+
+        assertThat(response.tripId()).isEqualTo(tripId);
+        assertThat(response.totalCount()).isEqualTo(2);
+        assertThat(response.correctCount()).isEqualTo(1);
+        assertThat(response.accuracy()).isEqualTo(50);
+        assertThat(response.results())
+                .extracting(result -> result.sessionId(), result -> result.quizId(), result -> result.selectedChoiceId(), result -> result.correctChoiceId())
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(10L, 100L, 1L, 1L),
+                        org.assertj.core.groups.Tuple.tuple(11L, 101L, 5L, 4L)
+                );
+    }
+
+    @Test
+    void getResultsByTripIdThrowsWhenNoSubmittedResults() {
+        Long tripId = 1L;
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
+        when(quizMapper.findResultRowsByTripId(tripId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> quizService.getResultsByTripId(USER_ID, tripId))
+                .isInstanceOf(NoSuchElementException.class)
+                .hasMessage("제출된 퀴즈 결과가 없습니다.");
+    }
+
     private QuizSessionQuestion sessionQuestion(Long sessionId,
                                                 Long tripId,
                                                 Long quizId,
@@ -423,6 +458,23 @@ class QuizServiceTest {
                 "AI 생성 해설 " + index,
                 "MEDIUM"
         );
+    }
+
+    private QuizResultRow resultRow(Long sessionId,
+                                    Long tripId,
+                                    Long quizId,
+                                    boolean correct,
+                                    Long selectedChoiceId,
+                                    Long correctChoiceId) {
+        return QuizResultRow.builder()
+                .sessionId(sessionId)
+                .tripId(tripId)
+                .quizId(quizId)
+                .correct(correct)
+                .selectedChoiceId(selectedChoiceId)
+                .correctChoiceId(correctChoiceId)
+                .explanation("퀴즈 해설")
+                .build();
     }
 
     private void assignGeneratedQuizIds(long startId) {

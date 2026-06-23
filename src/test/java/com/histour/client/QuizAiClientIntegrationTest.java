@@ -23,7 +23,7 @@ class QuizAiClientIntegrationTest {
         String apiKey = resolveGmsApiKey();
         Assumptions.assumeTrue(apiKey != null && !apiKey.isBlank(), "GMS API key is not configured");
 
-        QuizAiClient client = new QuizAiClient();
+        GmsAiClient client = new GmsAiClient();
         ReflectionTestUtils.setField(
                 client,
                 "anthropicUrl",

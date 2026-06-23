@@ -110,6 +110,23 @@
         WHERE quiz_session_id = #{sessionId}
     </select>
 
+    <select id="findResultRowsByTripId" resultType="com.histour.domain.quiz.entity.QuizResultRow">
+        SELECT s.id AS session_id,
+               s.trip_id,
+               s.quiz_id,
+               qr.is_correct AS correct,
+               qr.selected_choice_id,
+               correct_choice.id AS correct_choice_id,
+               q.explanation
+        FROM quiz_sessions s
+        JOIN quiz q ON q.id = s.quiz_id
+        JOIN quiz_results qr ON qr.quiz_session_id = s.id
+        LEFT JOIN quiz_choices correct_choice ON correct_choice.quiz_id = q.id
+                                           AND correct_choice.is_correct = TRUE
+        WHERE s.trip_id = #{tripId}
+        ORDER BY s.sort_order
+    </select>
+
     <insert id="insertResult" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO quiz_results (quiz_session_id, selected_choice_id, is_correct, answered_at)
         VALUES (#{quizSessionId}, #{selectedChoiceId}, #{correct}, NOW())

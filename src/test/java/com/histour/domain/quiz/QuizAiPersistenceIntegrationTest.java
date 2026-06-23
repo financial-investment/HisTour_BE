@@ -1,6 +1,6 @@
 package com.histour.domain.quiz;
 
-import com.histour.client.QuizAiClient;
+import com.histour.client.GmsAiClient;
 import com.histour.domain.quiz.dto.AiQuizGenerateRequest;
 import com.histour.domain.quiz.dto.AiQuizQuestion;
 import com.histour.domain.quiz.dto.AiVisitedHeritage;
@@ -68,7 +68,7 @@ class QuizAiPersistenceIntegrationTest {
         String apiKey = resolveGmsApiKey();
         Assumptions.assumeTrue(apiKey != null && !apiKey.isBlank(), "GMS API key is not configured");
 
-        QuizAiClient client = new QuizAiClient();
+        GmsAiClient client = new GmsAiClient();
         ReflectionTestUtils.setField(
                 client,
                 "anthropicUrl",
