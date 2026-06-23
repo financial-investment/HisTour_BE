@@ -15,4 +15,5 @@ public class Heritage {
     private String ccbaKdcd;
     private String ccbaAsno;
     private String ccbaCtcd;
+    private String description;
 }

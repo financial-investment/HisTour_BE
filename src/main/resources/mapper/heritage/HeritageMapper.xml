@@ -87,11 +87,18 @@
     </select>
 
     <select id="findAllForEmbedding" resultType="com.histour.domain.heritage.entity.Heritage">
-        SELECT id, name, name_hanja, category, period,
-               ST_Latitude(location) AS lat, ST_Longitude(location) AS lng,
-               ccba_ctcd
-        FROM heritage
-        ORDER BY id
+        SELECT h.id, h.name, h.name_hanja, h.category, h.period,
+               ST_Latitude(h.location) AS lat, ST_Longitude(h.location) AS lng,
+               h.ccba_ctcd,
+               d.content AS description
+        FROM heritage h
+        <!-- insertDescription에 UNIQUE 제약 없어 로더 재실행 시 중복 가능 → MIN(id)로 1건만 보장 -->
+        LEFT JOIN heritage_descriptions d
+            ON d.id = (
+                SELECT MIN(id) FROM heritage_descriptions
+                WHERE heritage_id = h.id AND source = 'OFFICIAL' AND depth_level = 1
+            )
+        ORDER BY h.id
     </select>
 
     <select id="findVisitedByTripId" resultType="com.histour.domain.heritage.entity.Heritage">
@@ -119,6 +126,25 @@
             ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326)
         )
         LIMIT 5
+    </select>
+
+
+    <select id="findNearestByLocation" resultType="com.histour.domain.heritage.entity.Heritage">
+        SELECT
+            id, name, name_hanja, category, period,
+            ST_Latitude(location)  AS lat,
+            ST_Longitude(location) AS lng,
+            thumbnail_url
+        FROM heritage
+        WHERE ST_Distance_Sphere(
+            location,
+            ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326)
+        ) &lt;= #{radiusM}
+        ORDER BY ST_Distance_Sphere(
+            location,
+            ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326)
+        )
+        LIMIT #{limit}
     </select>
 
 </mapper>

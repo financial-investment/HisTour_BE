@@ -52,13 +52,9 @@ public class EmbeddingLoader implements ApplicationRunner {
         List<Heritage> heritages = heritageMapper.findAllForEmbedding();
         log.info("[EmbeddingLoader] 총 {}건 처리 예정", heritages.size());
 
-        int saved = 0, skipped = 0;
+        int saved = 0;
         for (Heritage h : heritages) {
             String key = KEY_PREFIX + h.getId();
-            if (jedisPooled.exists(key)) {
-                skipped++;
-                continue;
-            }
             try {
                 String text = buildEmbeddingText(h);
                 List<Float> embedding = gmsAiClient.createEmbedding(text);
@@ -74,13 +70,13 @@ public class EmbeddingLoader implements ApplicationRunner {
                 saved++;
 
                 if (saved % 100 == 0) {
-                    log.info("[EmbeddingLoader] {}건 저장 완료 (스킵: {})", saved, skipped);
+                    log.info("[EmbeddingLoader] {}건 저장 완료", saved);
                 }
             } catch (Exception e) {
                 log.warn("[EmbeddingLoader] heritageId={} 실패: {}", h.getId(), e.getMessage());
             }
         }
-        log.info("[EmbeddingLoader] 완료 — 저장: {}건, 스킵: {}건", saved, skipped);
+        log.info("[EmbeddingLoader] 완료 — 저장: {}건", saved);
     }
 
     void ensureIndex() {
@@ -107,6 +103,8 @@ public class EmbeddingLoader implements ApplicationRunner {
         }
     }
 
+    private static final int DESC_LIMIT = 800;
+
     private String buildEmbeddingText(Heritage h) {
         StringBuilder sb = new StringBuilder(h.getName());
         if (h.getNameHanja() != null && !h.getNameHanja().isBlank()) {
@@ -114,6 +112,10 @@ public class EmbeddingLoader implements ApplicationRunner {
         }
         if (h.getCategory() != null) sb.append(" ").append(h.getCategory());
         if (h.getPeriod() != null) sb.append(" ").append(PERIOD_NAMES.getOrDefault(h.getPeriod(), h.getPeriod()));
+        if (h.getDescription() != null && !h.getDescription().isBlank()) {
+            String desc = h.getDescription().trim();
+            sb.append(" ").append(desc.length() > DESC_LIMIT ? desc.substring(0, DESC_LIMIT) : desc);
+        }
         return sb.toString();
     }
 
