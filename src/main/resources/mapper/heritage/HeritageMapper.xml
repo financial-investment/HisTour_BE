@@ -92,8 +92,12 @@
                h.ccba_ctcd,
                d.content AS description
         FROM heritage h
+        <!-- insertDescription에 UNIQUE 제약 없어 로더 재실행 시 중복 가능 → MIN(id)로 1건만 보장 -->
         LEFT JOIN heritage_descriptions d
-            ON d.heritage_id = h.id AND d.source = 'OFFICIAL' AND d.depth_level = 1
+            ON d.id = (
+                SELECT MIN(id) FROM heritage_descriptions
+                WHERE heritage_id = h.id AND source = 'OFFICIAL' AND depth_level = 1
+            )
         ORDER BY h.id
     </select>
 
