@@ -7,6 +7,15 @@
         SELECT COUNT(*) FROM heritage
     </select>
 
+    <select id="countByCategory" resultType="com.histour.domain.heritage.dto.HeritageCategoryStats">
+        SELECT category, COUNT(*) AS total
+        FROM heritage
+        WHERE category IS NOT NULL
+          AND TRIM(category) != ''
+        GROUP BY category
+        ORDER BY total DESC
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT IGNORE INTO heritage (name, name_hanja, category, period, location, thumbnail_url, ccba_kdcd, ccba_asno, ccba_ctcd)
         VALUES (

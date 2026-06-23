@@ -4,6 +4,7 @@ import com.histour.common.response.ApiResponse;
 import com.histour.domain.heritage.dto.ExplainRequest;
 import com.histour.domain.heritage.dto.ExplainResponse;
 import com.histour.domain.heritage.dto.ExplainTopic;
+import com.histour.domain.heritage.dto.HeritageCategoryStats;
 import com.histour.domain.heritage.dto.HeritageDetailResponse;
 import com.histour.domain.heritage.service.HeritageService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Tag(name = "Heritage", description = "문화재 해설 API")
 @RestController
 @RequestMapping("/api/heritage")
@@ -22,6 +25,12 @@ import org.springframework.web.bind.annotation.*;
 public class HeritageController {
 
     private final HeritageService heritageService;
+
+    @Operation(summary = "카테고리별 문화재 통계", description = "DB에 적재된 전체 문화재 수를 카테고리별로 반환합니다.")
+    @GetMapping("/stats/category")
+    public ApiResponse<List<HeritageCategoryStats>> getCategoryStats() {
+        return ApiResponse.ok(heritageService.getCategoryStats());
+    }
 
     @Operation(summary = "문화재 상세 조회", description = "문화재 기본 정보, 공식 설명, 사진 목록을 반환합니다.")
     @GetMapping("/{heritageId}")
