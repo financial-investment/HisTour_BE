@@ -3,6 +3,7 @@ package com.histour.domain.quiz;
 import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
 import com.histour.domain.quiz.entity.QuizResult;
+import com.histour.domain.quiz.entity.QuizResultRow;
 import com.histour.domain.quiz.entity.QuizSession;
 import com.histour.domain.quiz.entity.QuizSessionQuestion;
 import org.junit.jupiter.api.AfterEach;
@@ -130,6 +131,15 @@ class QuizMapperTest {
         assertThat(savedResult.getId()).isEqualTo(result.getId());
         assertThat(savedResult.getSelectedChoiceId()).isEqualTo(correctChoice.getId());
         assertThat(savedResult.isCorrect()).isTrue();
+
+        List<QuizResultRow> resultRows = quizMapper.findResultRowsByTripId(TRIP_ID);
+        assertThat(resultRows).hasSize(1);
+        assertThat(resultRows.getFirst().getSessionId()).isEqualTo(session.getId());
+        assertThat(resultRows.getFirst().getQuizId()).isEqualTo(quiz.getId());
+        assertThat(resultRows.getFirst().getSelectedChoiceId()).isEqualTo(correctChoice.getId());
+        assertThat(resultRows.getFirst().getCorrectChoiceId()).isEqualTo(correctChoice.getId());
+        assertThat(resultRows.getFirst().isCorrect()).isTrue();
+        assertThat(resultRows.getFirst().getExplanation()).isEqualTo("테스트 해설");
 
         quizMapper.updateSessionStatus(session.getId(), "SUBMITTED");
         String status = jdbcTemplate.queryForObject(

@@ -16,6 +16,7 @@ import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
 import com.histour.domain.quiz.entity.QuizGradingRow;
 import com.histour.domain.quiz.entity.QuizResult;
+import com.histour.domain.quiz.entity.QuizResultRow;
 import com.histour.domain.quiz.entity.QuizSession;
 import com.histour.domain.quiz.entity.QuizSessionQuestion;
 import com.histour.domain.trip.Trip;
@@ -143,6 +144,38 @@ public class QuizService {
                 accuracy,
                 preparedResults.stream()
                         .map(PreparedQuizResult::item)
+                        .toList()
+        );
+    }
+
+    public QuizResultResponse getResultsByTripId(Long userId, Long tripId) {
+        validateTripOwner(tripId, userId);
+
+        List<QuizResultRow> rows = quizMapper.findResultRowsByTripId(tripId);
+        if (rows.isEmpty()) {
+            throw new NoSuchElementException("제출된 퀴즈 결과가 없습니다.");
+        }
+
+        int correctCount = (int) rows.stream()
+                .filter(QuizResultRow::isCorrect)
+                .count();
+        int totalCount = rows.size();
+        int accuracy = (int) Math.round(correctCount * 100.0 / totalCount);
+
+        return new QuizResultResponse(
+                tripId,
+                totalCount,
+                correctCount,
+                accuracy,
+                rows.stream()
+                        .map(row -> new QuizResultItemResponse(
+                                row.getSessionId(),
+                                row.getQuizId(),
+                                row.isCorrect(),
+                                row.getSelectedChoiceId(),
+                                row.getCorrectChoiceId(),
+                                row.getExplanation()
+                        ))
                         .toList()
         );
     }

@@ -60,4 +60,17 @@ public class QuizController {
         Long userId = (Long) authentication.getPrincipal();
         return ApiResponse.ok(quizService.submitResults(userId, request));
     }
+
+    @Operation(
+            summary = "퀴즈 결과 조회",
+            description = "tripId에 대해 저장된 퀴즈 채점 결과를 반환합니다. 사용자가 선택한 선택지, 정답 선택지, 정오답, 해설을 포함합니다."
+    )
+    @GetMapping("/results")
+    public ApiResponse<QuizResultResponse> getResults(
+            Authentication authentication,
+            @RequestParam Long tripId
+    ) {
+        Long userId = (Long) authentication.getPrincipal();
+        return ApiResponse.ok(quizService.getResultsByTripId(userId, tripId));
+    }
 }

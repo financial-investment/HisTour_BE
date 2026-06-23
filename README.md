@@ -153,6 +153,7 @@ GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
 | POST | `/api/quiz/sessions` | 여행 방문 기록 기반 퀴즈 10개 생성/조회 |
 | GET | `/api/quiz/sessions?tripId={tripId}` | 생성된 퀴즈 세션 조회 |
 | POST | `/api/quiz/results` | 퀴즈 답안 제출 및 채점 결과 저장 |
+| GET | `/api/quiz/results?tripId={tripId}` | 저장된 퀴즈 채점 결과 조회 |
 
 ### 미구현
 
@@ -367,6 +368,12 @@ GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
 - `choiceId`가 해당 문제의 선택지인지 검증합니다.
 - 이미 제출된 세션은 중복 제출할 수 없습니다.
 - 채점 결과는 `quiz_results`에 저장하고, `quiz_sessions.status`를 `SUBMITTED`로 변경합니다.
+
+**퀴즈 결과 조회** `GET /api/quiz/results?tripId={tripId}`
+
+- 저장된 채점 결과를 답안 제출 응답과 같은 형식으로 반환합니다.
+- 본인 소유의 여행이 아니면 `403` 반환.
+- 제출된 결과가 없으면 `404` 반환.
 
 ---
 

@@ -4,6 +4,7 @@ import com.histour.domain.quiz.entity.Quiz;
 import com.histour.domain.quiz.entity.QuizChoice;
 import com.histour.domain.quiz.entity.QuizGradingRow;
 import com.histour.domain.quiz.entity.QuizResult;
+import com.histour.domain.quiz.entity.QuizResultRow;
 import com.histour.domain.quiz.entity.QuizSession;
 import com.histour.domain.quiz.entity.QuizSessionQuestion;
 import org.apache.ibatis.annotations.Mapper;
@@ -36,6 +37,8 @@ public interface QuizMapper {
     QuizChoice findCorrectChoiceByQuizId(@Param("quizId") Long quizId);
 
     QuizResult findResultBySessionId(@Param("sessionId") Long sessionId);
+
+    List<QuizResultRow> findResultRowsByTripId(@Param("tripId") Long tripId);
 
     void insertResult(QuizResult result);
 
