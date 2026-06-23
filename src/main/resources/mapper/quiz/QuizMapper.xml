@@ -63,6 +63,33 @@
         ORDER BY id
     </select>
 
+    <select id="findGradingRowsBySessionIds" resultType="com.histour.domain.quiz.entity.QuizGradingRow">
+        SELECT s.id AS session_id,
+               s.trip_id,
+               s.quiz_id,
+               q.explanation,
+               qr.id AS existing_result_id,
+               correct_choice.id AS correct_choice_id
+        FROM quiz_sessions s
+        JOIN quiz q ON q.id = s.quiz_id
+        LEFT JOIN quiz_results qr ON qr.quiz_session_id = s.id
+        LEFT JOIN quiz_choices correct_choice ON correct_choice.quiz_id = q.id
+                                           AND correct_choice.is_correct = TRUE
+        WHERE s.id IN
+        <foreach collection="sessionIds" item="sessionId" open="(" separator="," close=")">
+            #{sessionId}
+        </foreach>
+    </select>
+
+    <select id="findChoicesByIds" resultType="com.histour.domain.quiz.entity.QuizChoice">
+        SELECT id, quiz_id, content, is_correct AS correct
+        FROM quiz_choices
+        WHERE id IN
+        <foreach collection="choiceIds" item="choiceId" open="(" separator="," close=")">
+            #{choiceId}
+        </foreach>
+    </select>
+
     <select id="findChoiceById" resultType="com.histour.domain.quiz.entity.QuizChoice">
         SELECT id, quiz_id, content, is_correct AS correct
         FROM quiz_choices
