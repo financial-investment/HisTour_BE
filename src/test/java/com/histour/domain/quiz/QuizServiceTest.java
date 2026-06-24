@@ -289,8 +289,120 @@ class QuizServiceTest {
         verify(quizMapper, times(10)).insertSession(captor.capture());
         assertThat(captor.getAllValues())
                 .extracting(QuizSession::getQuizId)
-                .anyMatch(quizId -> quizId >= 100L && quizId < 200L)
-                .anyMatch(quizId -> quizId >= 200L && quizId < 300L);
+                .filteredOn(quizId -> quizId >= 100L && quizId < 200L)
+                .hasSize(5);
+        assertThat(captor.getAllValues())
+                .extracting(QuizSession::getQuizId)
+                .filteredOn(quizId -> quizId >= 200L && quizId < 300L)
+                .hasSize(5);
+    }
+
+    @Test
+    void createSessionGeneratesMissingQuotaForHeritageWithoutExistingQuizzes() {
+        Long tripId = 1L;
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
+        when(quizMapper.findSessionQuestionsByTripId(tripId))
+                .thenReturn(List.of())
+                .thenReturn(List.of(
+                        sessionQuestion(10L, tripId, 100L, 1L, "서울 숭례문", 1),
+                        sessionQuestion(11L, tripId, 101L, 1L, "서울 숭례문", 2),
+                        sessionQuestion(12L, tripId, 102L, 1L, "서울 숭례문", 3),
+                        sessionQuestion(13L, tripId, 103L, 1L, "서울 숭례문", 4),
+                        sessionQuestion(14L, tripId, 104L, 1L, "서울 숭례문", 5),
+                        sessionQuestion(15L, tripId, 2000L, 2L, "서울 원각사지 십층석탑", 6),
+                        sessionQuestion(16L, tripId, 2001L, 2L, "서울 원각사지 십층석탑", 7),
+                        sessionQuestion(17L, tripId, 2002L, 2L, "서울 원각사지 십층석탑", 8),
+                        sessionQuestion(18L, tripId, 2003L, 2L, "서울 원각사지 십층석탑", 9),
+                        sessionQuestion(19L, tripId, 2004L, 2L, "서울 원각사지 십층석탑", 10)
+                ));
+        when(tripMapper.findVisitLogsByTripId(tripId)).thenReturn(List.of(
+                visitLog(tripId, 1L),
+                visitLog(tripId, 2L)
+        ));
+        when(quizMapper.findQuizzesByHeritageIds(List.of(1L, 2L))).thenReturn(List.of(
+                quiz(100L, 1L), quiz(101L, 1L), quiz(102L, 1L), quiz(103L, 1L), quiz(104L, 1L),
+                quiz(105L, 1L), quiz(106L, 1L), quiz(107L, 1L), quiz(108L, 1L), quiz(109L, 1L)
+        ));
+        when(gmsAiClient.generateQuestions(any(AiQuizGenerateRequest.class))).thenReturn(List.of(
+                aiQuestion(2L, 0),
+                aiQuestion(2L, 1),
+                aiQuestion(2L, 2),
+                aiQuestion(2L, 3),
+                aiQuestion(2L, 4)
+        ));
+        assignGeneratedQuizIds(2000L);
+        when(quizMapper.findChoicesByQuizIds(any())).thenReturn(List.of());
+
+        quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId));
+
+        ArgumentCaptor<AiQuizGenerateRequest> aiRequestCaptor = ArgumentCaptor.forClass(AiQuizGenerateRequest.class);
+        verify(gmsAiClient).generateQuestions(aiRequestCaptor.capture());
+        assertThat(aiRequestCaptor.getValue().count()).isEqualTo(5);
+        assertThat(aiRequestCaptor.getValue().visitedHeritages())
+                .extracting(visited -> visited.heritageId())
+                .containsExactly(2L);
+
+        verify(quizMapper, times(5)).insertQuiz(any(Quiz.class));
+        verify(quizMapper, times(20)).insertChoice(any(QuizChoice.class));
+
+        ArgumentCaptor<QuizSession> sessionCaptor = ArgumentCaptor.forClass(QuizSession.class);
+        verify(quizMapper, times(10)).insertSession(sessionCaptor.capture());
+        assertThat(sessionCaptor.getAllValues())
+                .extracting(QuizSession::getQuizId)
+                .filteredOn(quizId -> quizId >= 100L && quizId < 200L)
+                .hasSize(5);
+        assertThat(sessionCaptor.getAllValues())
+                .extracting(QuizSession::getQuizId)
+                .filteredOn(quizId -> quizId >= 2000L && quizId < 3000L)
+                .hasSize(5);
+    }
+
+    @Test
+    void createSessionFallsBackToRemainingExistingQuizzesWhenAiDoesNotFillQuota() {
+        Long tripId = 1L;
+        when(tripMapper.findTripById(tripId)).thenReturn(trip(tripId, USER_ID));
+        when(quizMapper.findSessionQuestionsByTripId(tripId))
+                .thenReturn(List.of())
+                .thenReturn(List.of(
+                        sessionQuestion(10L, tripId, 100L, 1L, "서울 숭례문", 1),
+                        sessionQuestion(11L, tripId, 101L, 1L, "서울 숭례문", 2),
+                        sessionQuestion(12L, tripId, 102L, 1L, "서울 숭례문", 3),
+                        sessionQuestion(13L, tripId, 103L, 1L, "서울 숭례문", 4),
+                        sessionQuestion(14L, tripId, 104L, 1L, "서울 숭례문", 5),
+                        sessionQuestion(15L, tripId, 105L, 1L, "서울 숭례문", 6),
+                        sessionQuestion(16L, tripId, 106L, 1L, "서울 숭례문", 7),
+                        sessionQuestion(17L, tripId, 107L, 1L, "서울 숭례문", 8),
+                        sessionQuestion(18L, tripId, 108L, 1L, "서울 숭례문", 9),
+                        sessionQuestion(19L, tripId, 109L, 1L, "서울 숭례문", 10)
+                ));
+        when(tripMapper.findVisitLogsByTripId(tripId)).thenReturn(List.of(
+                visitLog(tripId, 1L),
+                visitLog(tripId, 2L)
+        ));
+        when(quizMapper.findQuizzesByHeritageIds(List.of(1L, 2L))).thenReturn(List.of(
+                quiz(100L, 1L), quiz(101L, 1L), quiz(102L, 1L), quiz(103L, 1L), quiz(104L, 1L),
+                quiz(105L, 1L), quiz(106L, 1L), quiz(107L, 1L), quiz(108L, 1L), quiz(109L, 1L)
+        ));
+        when(gmsAiClient.generateQuestions(any(AiQuizGenerateRequest.class))).thenReturn(List.of());
+        when(quizMapper.findChoicesByQuizIds(any())).thenReturn(List.of());
+
+        quizService.createSession(USER_ID, new QuizSessionCreateRequest(tripId));
+
+        ArgumentCaptor<AiQuizGenerateRequest> aiRequestCaptor = ArgumentCaptor.forClass(AiQuizGenerateRequest.class);
+        verify(gmsAiClient).generateQuestions(aiRequestCaptor.capture());
+        assertThat(aiRequestCaptor.getValue().count()).isEqualTo(5);
+        assertThat(aiRequestCaptor.getValue().visitedHeritages())
+                .extracting(visited -> visited.heritageId())
+                .containsExactly(2L);
+
+        verify(quizMapper, never()).insertQuiz(any(Quiz.class));
+        verify(quizMapper, never()).insertChoice(any(QuizChoice.class));
+
+        ArgumentCaptor<QuizSession> sessionCaptor = ArgumentCaptor.forClass(QuizSession.class);
+        verify(quizMapper, times(10)).insertSession(sessionCaptor.capture());
+        assertThat(sessionCaptor.getAllValues())
+                .extracting(QuizSession::getQuizId)
+                .containsExactlyInAnyOrder(100L, 101L, 102L, 103L, 104L, 105L, 106L, 107L, 108L, 109L);
     }
 
     @Test

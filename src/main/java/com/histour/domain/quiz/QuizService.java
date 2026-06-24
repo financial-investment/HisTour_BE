@@ -35,7 +35,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -76,22 +75,32 @@ public class QuizService {
             throw new IllegalStateException("방문 유적지 정보가 없어 퀴즈를 생성할 수 없습니다.");
         }
 
+        Map<Long, Integer> quizQuotaByHeritageId = calculateHeritageQuotas(heritageIds, DAILY_QUIZ_COUNT);
         List<Quiz> candidateQuizzes = quizMapper.findQuizzesByHeritageIds(heritageIds);
-        List<Quiz> quizzes = selectBalancedRandomQuizzes(candidateQuizzes, heritageIds, DAILY_QUIZ_COUNT);
+        List<Quiz> quizzes = selectQuizzesWithinHeritageQuotas(candidateQuizzes, quizQuotaByHeritageId);
         List<AiQuizQuestion> aiQuestions = List.of();
         if (quizzes.size() < DAILY_QUIZ_COUNT) {
-            int missingCount = DAILY_QUIZ_COUNT - quizzes.size();
-            aiQuestions = generateValidAiQuestions(missingCount, visitLogs, heritageIds);
+            aiQuestions = generateMissingAiQuestionsByQuota(
+                    quizQuotaByHeritageId,
+                    countQuizzesByHeritageId(quizzes),
+                    visitLogs
+            );
         }
-        if (quizzes.size() + aiQuestions.size() < DAILY_QUIZ_COUNT) {
-            throw new IllegalStateException("퀴즈 10개를 생성하지 못했습니다.");
-        }
-
         List<Quiz> existingQuizzes = quizzes;
         List<AiQuizQuestion> generatedAiQuestions = aiQuestions;
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             List<Quiz> sessionQuizzes = new ArrayList<>(existingQuizzes);
             sessionQuizzes.addAll(saveAiQuizzes(generatedAiQuestions));
+            if (sessionQuizzes.size() < DAILY_QUIZ_COUNT) {
+                sessionQuizzes.addAll(selectFallbackQuizzes(
+                        candidateQuizzes,
+                        sessionQuizzes,
+                        DAILY_QUIZ_COUNT - sessionQuizzes.size()
+                ));
+            }
+            if (sessionQuizzes.size() < DAILY_QUIZ_COUNT) {
+                throw new IllegalStateException("퀴즈 10개를 생성하지 못했습니다.");
+            }
 
             for (int i = 0; i < sessionQuizzes.size(); i++) {
                 quizMapper.insertSession(QuizSession.builder()
@@ -306,8 +315,37 @@ public class QuizService {
         return new QuizSessionResponse(tripId, questionResponses.size(), questionResponses);
     }
 
-    private List<AiQuizQuestion> generateValidAiQuestions(int missingCount, List<VisitLog> visitLogs, List<Long> heritageIds) {
-        Set<Long> validHeritageIds = new HashSet<>(heritageIds);
+    private List<AiQuizQuestion> generateMissingAiQuestionsByQuota(Map<Long, Integer> quotaByHeritageId,
+                                                                   Map<Long, Long> selectedCountByHeritageId,
+                                                                   List<VisitLog> visitLogs) {
+        Map<Long, List<VisitLog>> visitLogsByHeritageId = visitLogs.stream()
+                .filter(visitLog -> visitLog.getHeritageId() != null)
+                .collect(Collectors.groupingBy(
+                        VisitLog::getHeritageId,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<AiQuizQuestion> questions = new ArrayList<>();
+        for (var entry : quotaByHeritageId.entrySet()) {
+            Long heritageId = entry.getKey();
+            int selectedCount = selectedCountByHeritageId.getOrDefault(heritageId, 0L).intValue();
+            int missingCount = entry.getValue() - selectedCount;
+            if (missingCount <= 0) {
+                continue;
+            }
+            questions.addAll(generateValidAiQuestions(
+                    missingCount,
+                    visitLogsByHeritageId.getOrDefault(heritageId, List.of()),
+                    Set.of(heritageId)
+            ));
+        }
+        return questions;
+    }
+
+    private List<AiQuizQuestion> generateValidAiQuestions(int missingCount,
+                                                          List<VisitLog> visitLogs,
+                                                          Set<Long> validHeritageIds) {
         AiQuizGenerateRequest request = new AiQuizGenerateRequest(
                 missingCount,
                 visitLogs.stream()
@@ -387,7 +425,23 @@ public class QuizService {
         };
     }
 
-    private List<Quiz> selectBalancedRandomQuizzes(List<Quiz> candidates, List<Long> heritageIds, int targetCount) {
+    private Map<Long, Integer> calculateHeritageQuotas(List<Long> heritageIds, int targetCount) {
+        int baseCount = targetCount / heritageIds.size();
+        int remainder = targetCount % heritageIds.size();
+
+        Map<Long, Integer> quotaByHeritageId = new LinkedHashMap<>();
+        for (int i = 0; i < heritageIds.size(); i++) {
+            quotaByHeritageId.put(heritageIds.get(i), baseCount + (i < remainder ? 1 : 0));
+        }
+        return quotaByHeritageId;
+    }
+
+    private Map<Long, Long> countQuizzesByHeritageId(List<Quiz> quizzes) {
+        return quizzes.stream()
+                .collect(Collectors.groupingBy(Quiz::getHeritageId, Collectors.counting()));
+    }
+
+    private List<Quiz> selectQuizzesWithinHeritageQuotas(List<Quiz> candidates, Map<Long, Integer> quotaByHeritageId) {
         Map<Long, List<Quiz>> quizzesByHeritageId = candidates.stream()
                 .collect(Collectors.groupingBy(
                         Quiz::getHeritageId,
@@ -398,28 +452,36 @@ public class QuizService {
         quizzesByHeritageId.values().forEach(Collections::shuffle);
 
         List<Quiz> selected = new ArrayList<>();
-        Set<Long> selectedQuizIds = new HashSet<>();
-        while (selected.size() < targetCount) {
-            boolean addedInRound = false;
-            for (Long heritageId : heritageIds) {
-                List<Quiz> quizzes = quizzesByHeritageId.getOrDefault(heritageId, List.of());
-                while (!quizzes.isEmpty()) {
-                    Quiz quiz = quizzes.removeFirst();
-                    if (selectedQuizIds.add(quiz.getId())) {
-                        selected.add(quiz);
-                        addedInRound = true;
-                        break;
-                    }
+        for (var entry : quotaByHeritageId.entrySet()) {
+            List<Quiz> quizzes = quizzesByHeritageId.getOrDefault(entry.getKey(), List.of());
+            for (int i = 0; i < entry.getValue() && !quizzes.isEmpty(); i++) {
+                Quiz quiz = quizzes.removeFirst();
+                if (quiz.getId() != null) {
+                    selected.add(quiz);
                 }
-                if (selected.size() == targetCount) {
-                    break;
-                }
-            }
-            if (!addedInRound) {
-                break;
             }
         }
-
         return selected;
+    }
+
+    private List<Quiz> selectFallbackQuizzes(List<Quiz> candidates, List<Quiz> alreadySelected, int missingCount) {
+        if (missingCount <= 0) {
+            return List.of();
+        }
+
+        Set<Long> selectedQuizIds = alreadySelected.stream()
+                .map(Quiz::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        List<Quiz> remainingCandidates = candidates.stream()
+                .filter(quiz -> quiz.getId() != null)
+                .filter(quiz -> !selectedQuizIds.contains(quiz.getId()))
+                .collect(Collectors.toCollection(ArrayList::new));
+        Collections.shuffle(remainingCandidates);
+
+        return remainingCandidates.stream()
+                .limit(missingCount)
+                .toList();
     }
 }
