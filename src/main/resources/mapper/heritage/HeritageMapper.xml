@@ -134,7 +134,7 @@
             location,
             ST_GeomFromText(CONCAT('POINT(', #{lat}, ' ', #{lng}, ')'), 4326)
         )
-        LIMIT 5
+        LIMIT 15
     </select>
 
 
