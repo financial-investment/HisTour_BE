@@ -1,6 +1,7 @@
 package com.histour.domain.heritage.mapper;
 
 import com.histour.domain.heritage.dto.HeritageCategoryStats;
+import com.histour.domain.heritage.dto.HeritageMapItem;
 import com.histour.domain.heritage.entity.Heritage;
 import com.histour.domain.heritage.entity.HeritageDescription;
 import com.histour.domain.heritage.entity.HeritageMedia;
@@ -20,6 +21,8 @@ public interface HeritageMapper {
     Heritage findById(@Param("id") Long id);
     List<Heritage> findByIds(@Param("ids") List<Long> ids);
     List<Heritage> findNearby(@Param("lat") double lat, @Param("lng") double lng);
+    List<HeritageMapItem> findByBounds(@Param("swLat") double swLat, @Param("swLng") double swLng,
+                                       @Param("neLat") double neLat, @Param("neLng") double neLng);
     List<Heritage> findNearestByLocation(@Param("lat") double lat, @Param("lng") double lng,
                                          @Param("radiusM") double radiusM, @Param("limit") int limit);
     List<Heritage> findAllForEmbedding();

@@ -6,6 +6,7 @@ import com.histour.domain.heritage.dto.ExplainResponse;
 import com.histour.domain.heritage.dto.ExplainTopic;
 import com.histour.domain.heritage.dto.HeritageCategoryStats;
 import com.histour.domain.heritage.dto.HeritageDetailResponse;
+import com.histour.domain.heritage.dto.HeritageMapItem;
 import com.histour.domain.heritage.service.HeritageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -30,6 +31,17 @@ public class HeritageController {
     @GetMapping("/stats/category")
     public ApiResponse<List<HeritageCategoryStats>> getCategoryStats() {
         return ApiResponse.ok(heritageService.getCategoryStats());
+    }
+
+    @Operation(summary = "지도 시야 내 문화재 목록",
+               description = "지도 바운딩 박스(SW·NE 좌표)로 시야 내 문화재를 최대 100건 반환합니다.")
+    @GetMapping("/map")
+    public ApiResponse<List<HeritageMapItem>> getMapHeritages(
+            @Parameter(description = "남서쪽 위도") @RequestParam double swLat,
+            @Parameter(description = "남서쪽 경도") @RequestParam double swLng,
+            @Parameter(description = "북동쪽 위도") @RequestParam double neLat,
+            @Parameter(description = "북동쪽 경도") @RequestParam double neLng) {
+        return ApiResponse.ok(heritageService.getByBounds(swLat, swLng, neLat, neLng));
     }
 
     @Operation(summary = "문화재 상세 조회", description = "문화재 기본 정보, 공식 설명, 사진 목록을 반환합니다.")
