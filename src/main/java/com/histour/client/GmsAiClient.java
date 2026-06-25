@@ -1,5 +1,6 @@
 package com.histour.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -673,15 +674,20 @@ public class GmsAiClient {
             int start = trimmed.indexOf('\n');
             int end = trimmed.lastIndexOf("```");
             if (start >= 0 && end > start) {
-                return trimmed.substring(start + 1, end).strip();
+                trimmed = trimmed.substring(start + 1, end).strip();
             }
         }
         // JSON 객체 시작 위치 찾기
         int start = trimmed.indexOf('{');
         int end = trimmed.lastIndexOf('}');
-        if (start >= 0 && end > start) {
-            return trimmed.substring(start, end + 1);
+        String extracted = (start >= 0 && end > start) ? trimmed.substring(start, end + 1) : trimmed;
+
+        try {
+            objectMapper.readTree(extracted);
+        } catch (JsonProcessingException e) {
+            String preview = extracted.substring(0, Math.min(120, extracted.length()));
+            throw new GmsApiException("AI 응답 JSON 파싱 실패 (잘린 응답 또는 비정형): " + preview);
         }
-        return trimmed;
+        return extracted;
     }
 }

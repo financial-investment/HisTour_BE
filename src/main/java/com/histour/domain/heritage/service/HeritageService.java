@@ -8,6 +8,7 @@ import com.histour.domain.heritage.dto.ExplainResponse;
 import com.histour.domain.heritage.dto.ExplainTopic;
 import com.histour.domain.heritage.dto.HeritageCategoryStats;
 import com.histour.domain.heritage.dto.HeritageDetailResponse;
+import com.histour.domain.heritage.dto.HeritageMapItem;
 import com.histour.domain.heritage.entity.HeritageMedia;
 import com.histour.domain.heritage.entity.Heritage;
 import com.histour.domain.heritage.entity.HeritageDescription;
@@ -68,21 +69,29 @@ public class HeritageService {
             log.info("[기본 해설 캐시 히트] heritage_id={}, name={}", identified.getId(), identified.getName());
             explanation = cached.getContent();
         } else {
-            // 4. 식별된 문화재의 공식 설명만 로드
-            HeritageDescription officialDes = heritageMapper.findOfficialDescription(identified.getId());
-            String officialDesc = officialDes != null ? officialDes.getContent() : null;
+            // 동시 요청 경쟁 조건 방지: 같은 heritage에 대해 AI를 중복 호출하지 않도록 동기화
+            synchronized (("explain_basic_" + identified.getId()).intern()) {
+                HeritageDescription doubleCheck = heritageMapper.findAiDescription(identified.getId(), 1, "AI 기본 해설");
+                if (doubleCheck != null) {
+                    explanation = doubleCheck.getContent();
+                } else {
+                    // 4. 식별된 문화재의 공식 설명만 로드
+                    HeritageDescription officialDes = heritageMapper.findOfficialDescription(identified.getId());
+                    String officialDesc = officialDes != null ? officialDes.getContent() : null;
 
-            // 5. GMS 해설 호출 (이미지 없음, max_tokens=1500)
-            explanation = gmsAiClient.generateBasicExplanation(identified, officialDesc);
+                    // 5. GMS 해설 호출
+                    explanation = gmsAiClient.generateBasicExplanation(identified, officialDesc);
 
-            // 6. 기본 해설 캐시 저장 (heritage 단위)
-            heritageMapper.insertDescription(HeritageDescription.builder()
-                    .heritageId(identified.getId())
-                    .content(explanation)
-                    .depthLevel(1)
-                    .topic("AI 기본 해설")
-                    .source("AI_GENERATED")
-                    .build());
+                    // 6. 기본 해설 캐시 저장 (heritage 단위)
+                    heritageMapper.insertDescription(HeritageDescription.builder()
+                            .heritageId(identified.getId())
+                            .content(explanation)
+                            .depthLevel(1)
+                            .topic("AI 기본 해설")
+                            .source("AI_GENERATED")
+                            .build());
+                }
+            }
         }
 
         // 7. visit_log 저장
@@ -110,6 +119,10 @@ public class HeritageService {
 
     public List<HeritageCategoryStats> getCategoryStats() {
         return heritageMapper.countByCategory();
+    }
+
+    public List<HeritageMapItem> getByBounds(double swLat, double swLng, double neLat, double neLng) {
+        return heritageMapper.findByBounds(swLat, swLng, neLat, neLng);
     }
 
     public HeritageDetailResponse getDetail(Long heritageId) {
@@ -188,7 +201,7 @@ public class HeritageService {
 
             return uploadBaseUrl + "/" + filename;
         } catch (IOException e) {
-            log.warn("[HeritageService] 사진 저장 실패: {}", e.getMessage());
+            log.error("[HeritageService] 사진 저장 실패: {}", e.getMessage());
             return null;
         }
     }

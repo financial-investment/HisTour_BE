@@ -50,6 +50,7 @@
 
     <select id="findVisitLogsByTripId" resultType="com.histour.domain.trip.VisitLog">
         SELECT v.id, v.trip_id, v.heritage_id, h.name AS heritage_name,
+               h.thumbnail_url AS heritage_thumbnail_url,
                v.photo_url,
                ST_Latitude(v.location) AS lat, ST_Longitude(v.location) AS lng,
                v.explanation, v.visited_at
