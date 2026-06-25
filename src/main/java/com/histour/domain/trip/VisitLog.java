@@ -16,6 +16,7 @@ public class VisitLog {
     private Long tripId;
     private Long heritageId;
     private String heritageName;
+    private String heritageThumbnailUrl;
     private String photoUrl;
     private double lat;
     private double lng;
