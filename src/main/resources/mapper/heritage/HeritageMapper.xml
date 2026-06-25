@@ -138,6 +138,19 @@
     </select>
 
 
+    <select id="findByBounds" resultType="com.histour.domain.heritage.dto.HeritageMapItem">
+        SELECT
+            id          AS heritageId,
+            name,
+            ST_Latitude(location)  AS lat,
+            ST_Longitude(location) AS lng,
+            thumbnail_url          AS thumbnailUrl
+        FROM heritage
+        WHERE ST_Latitude(location)  BETWEEN #{swLat} AND #{neLat}
+          AND ST_Longitude(location) BETWEEN #{swLng} AND #{neLng}
+        LIMIT 100
+    </select>
+
     <select id="findNearestByLocation" resultType="com.histour.domain.heritage.entity.Heritage">
         SELECT
             id, name, name_hanja, category, period,

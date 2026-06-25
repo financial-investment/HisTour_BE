@@ -8,6 +8,7 @@ import com.histour.domain.heritage.dto.ExplainResponse;
 import com.histour.domain.heritage.dto.ExplainTopic;
 import com.histour.domain.heritage.dto.HeritageCategoryStats;
 import com.histour.domain.heritage.dto.HeritageDetailResponse;
+import com.histour.domain.heritage.dto.HeritageMapItem;
 import com.histour.domain.heritage.entity.HeritageMedia;
 import com.histour.domain.heritage.entity.Heritage;
 import com.histour.domain.heritage.entity.HeritageDescription;
@@ -110,6 +111,10 @@ public class HeritageService {
 
     public List<HeritageCategoryStats> getCategoryStats() {
         return heritageMapper.countByCategory();
+    }
+
+    public List<HeritageMapItem> getByBounds(double swLat, double swLng, double neLat, double neLng) {
+        return heritageMapper.findByBounds(swLat, swLng, neLat, neLng);
     }
 
     public HeritageDetailResponse getDetail(Long heritageId) {
