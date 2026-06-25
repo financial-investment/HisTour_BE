@@ -27,17 +27,16 @@
 src/main/java/com/histour/
 ├── HistourApplication.java
 ├── api/controller/
-│   ├── HeritageController.java   # 문화재 해설 API (구현 완료)
-│   ├── UserController.java       # 회원가입/조회 (구현 완료)
-│   ├── TripController.java       # 여행 관리 + 추천 (구현 완료)
-│   ├── QuizController.java       # 여행 후 퀴즈 생성/채점 (구현 완료)
-│   └── ReportController.java     # 리포트 (구현 완료)
+│   ├── HeritageController.java   # 문화재 조회·해설 API
+│   ├── UserController.java       # 회원가입/조회
+│   ├── TripController.java       # 여행 관리 + 추천
+│   ├── QuizController.java       # 퀴즈 생성/채점
+│   └── ReportController.java     # 리포트
 ├── batch/
 │   ├── HeritageDataLoader.java   # 국가유산청 데이터 1회성 적재 (enabled: false)
 │   └── EmbeddingLoader.java      # heritage 전체 임베딩 → Redis Stack 적재 (enabled: false)
 ├── client/
-│   ├── GmsAiClient.java          # GMS AI 호출 (gpt-4o + Claude Haiku + Embeddings)
-│   ├── QuizAiClient.java         # 퀴즈 생성용 GMS Claude 호출
+│   ├── GmsAiClient.java          # GMS AI 호출 전담 (gpt-4o + Claude Haiku + Embeddings + 퀴즈 생성)
 │   └── HeritageApiClient.java    # 국가유산청 Open API 클라이언트
 ├── config/
 │   ├── SecurityConfig.java       # JWT 필터, /api/auth/** · /api/user(POST) · swagger 제외 인증 필요
@@ -45,12 +44,12 @@ src/main/java/com/histour/
 │   ├── WebConfig.java            # CORS
 │   └── SwaggerConfig.java
 ├── domain/
-│   ├── auth/                     # JWT 로그인/갱신/로그아웃 (구현 완료)
-│   ├── heritage/                 # 문화재 도메인 (구현 완료)
-│   ├── trip/                     # 여행·방문기록 도메인 (구현 완료)
-│   ├── user/                     # 사용자 도메인 (구현 완료)
-│   ├── quiz/                     # 여행 후 퀴즈 도메인 (구현 완료)
-│   └── report/                   # 추천·리포트 도메인 (구현 완료)
+│   ├── auth/                     # JWT 로그인/갱신/로그아웃
+│   ├── heritage/                 # 문화재 도메인
+│   ├── trip/                     # 여행·방문기록 도메인
+│   ├── user/                     # 사용자 도메인
+│   ├── quiz/                     # 여행 후 퀴즈 도메인
+│   └── report/                   # 추천·리포트 도메인
 └── common/
     ├── exception/GlobalExceptionHandler.java
     └── response/ApiResponse.java  # { success, data, message }
@@ -93,6 +92,7 @@ CREATE DATABASE histour CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ### 문화재 데이터 적재
 
 국가유산청 Open API에서 데이터를 받아 적재하는 1회성 로더입니다.
+전국 8,314건+ 적재 완료 상태이므로 DB를 덤프에서 복원한 경우 재실행 불필요.
 
 ```yaml
 # application.yaml
@@ -105,6 +105,7 @@ heritage:
 
 추천·리포트 API 사용 전 heritage 전체 임베딩을 Redis Stack에 적재해야 합니다.
 8,314건 기준 약 50분 소요 (GMS API text-embedding-3-small, ~9 크레딧).
+이미 적재 완료된 Redis를 사용하는 경우 재실행 불필요.
 
 ```yaml
 # application.yaml
@@ -121,8 +122,8 @@ embedding:
 # 빌드
 ./mvnw clean install -DskipTests
 
-# 실행
-GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
+# 실행 (로컬 프로파일 사용 권장)
+DB_PASSWORD=1234 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 - 서버 기본 포트: `http://localhost:8080`
@@ -133,8 +134,6 @@ GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
 
 ## API 엔드포인트
 
-### 구현 완료
-
 | Method | URL | 설명 |
 |---|---|---|
 | POST | `/api/auth/login` | 로그인 → Access/Refresh Token 발급 |
@@ -142,28 +141,57 @@ GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
 | POST | `/api/auth/logout` | 로그아웃 (Refresh Token 폐기) |
 | POST | `/api/user` | 회원가입 |
 | GET | `/api/user/me` | 내 정보 조회 |
+| GET | `/api/heritage/{heritageId}` | 문화재 상세 조회 |
+| GET | `/api/heritage/map` | 지도 시야(bounding box) 내 문화재 목록 (최대 100건) |
 | POST | `/api/heritage/explain` | 사진 + 위치 → 문화재 식별 + AI 해설 |
 | GET | `/api/heritage/{heritageId}/explain/deeper` | 심화 해설 (visitLogId 필수) |
 | GET | `/api/trip` | 내 여행 목록 (최신순, visitCount 포함) |
 | POST | `/api/trip` | 여행 생성 (IN_PROGRESS 여행 중복 불가) |
 | GET | `/api/trip/{tripId}` | 여행 상세 + 방문 기록 목록 |
 | PATCH | `/api/trip/{tripId}/complete` | 여행 완료 처리 |
-| GET | `/api/trip/{tripId}/recommend/next` | 진행 중 다음 문화재 추천 (KNN) |
-| GET | `/api/report/{tripId}` | 여행 리포트 + 완료 후 추천 |
-| POST | `/api/quiz/sessions` | 여행 방문 기록 기반 퀴즈 10개 생성/조회 |
+| GET | `/api/trip/{tripId}/recommend/next` | 진행 중 다음 문화재 추천 (KNN + 거리 필터) |
+| GET | `/api/report/{tripId}` | 여행 리포트 + 완료 후 코스 추천 |
+| POST | `/api/quiz/sessions` | 방문 기록 기반 퀴즈 10개 생성/조회 |
 | GET | `/api/quiz/sessions?tripId={tripId}` | 생성된 퀴즈 세션 조회 |
 | POST | `/api/quiz/results` | 퀴즈 답안 제출 및 채점 결과 저장 |
 | GET | `/api/quiz/results?tripId={tripId}` | 저장된 퀴즈 채점 결과 조회 |
 
-### 미구현
+---
 
-| Method | URL | 설명 |
-|---|---|---|
-| - | - | 모든 API 구현 완료 |
+### 문화재 지도 API
+
+**`GET /api/heritage/map`**
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `swLat` | double | Y | 남서쪽 위도 |
+| `swLng` | double | Y | 남서쪽 경도 |
+| `neLat` | double | Y | 북동쪽 위도 |
+| `neLng` | double | Y | 북동쪽 경도 |
+
+```json
+// Response
+{
+  "success": true,
+  "data": [
+    {
+      "heritageId": 208,
+      "name": "경복궁 근정전",
+      "lat": 37.5783,
+      "lng": 126.9770,
+      "thumbnailUrl": "https://..."
+    }
+  ]
+}
+```
+
+- 카카오맵 `getBounds()` → SW·NE 좌표로 호출
+- 최대 100건 반환 (기존 SPATIAL INDEX 활용)
+- 인증 필요
 
 ---
 
-### 해설 API 상세
+### 해설 API
 
 **기본 해설** `POST /api/heritage/explain`
 
@@ -194,192 +222,14 @@ GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
 
 **심화 해설** `GET /api/heritage/{heritageId}/explain/deeper?visitLogId={id}`
 
-```json
-// Response
-{
-  "success": true,
-  "data": {
-    "heritageId": 1,
-    "heritageName": "창덕궁",
-    "explanation": "잘 알려지지 않은 비화...",
-    "visitLogId": null
-  }
-}
-```
-
 - 기본 해설의 `visitLogId`를 파라미터로 전달
 - 동일 문화재에 대한 심화 해설은 DB에 캐싱 (depth_level=2)
 
 ---
 
-### Trip API 상세
+### 추천 API
 
-**여행 생성** `POST /api/trip`
-
-```json
-// Request
-{ "title": "경복궁 탐방", "tripDate": "2026-06-17" }
-
-// Response  201 Created
-{ "success": true, "data": 1 }
-```
-
-- `title`, `tripDate` 모두 nullable
-- 이미 IN_PROGRESS 여행이 있으면 `400` 반환
-
-**내 여행 목록** `GET /api/trip`
-
-```json
-// Response
-{
-  "success": true,
-  "data": [
-    {
-      "tripId": 1,
-      "title": "경복궁 탐방",
-      "tripDate": "2026-06-17",
-      "status": "IN_PROGRESS",
-      "createdAt": "2026-06-17T10:00:00",
-      "visitCount": 3
-    }
-  ]
-}
-```
-
-**여행 상세** `GET /api/trip/{tripId}`
-
-```json
-// Response
-{
-  "success": true,
-  "data": {
-    "tripId": 1,
-    "title": "경복궁 탐방",
-    "status": "COMPLETED",
-    "visitCount": 2,
-    "visitLogs": [
-      {
-        "id": 5,
-        "heritageId": 1,
-        "heritageName": "경복궁",
-        "explanation": "지금 당신이 서 있는 이 곳에서는...",
-        "visitedAt": "2026-06-17T11:30:00"
-      }
-    ]
-  }
-}
-```
-
-- 본인 여행이 아니면 `400` 반환
-
-**여행 완료** `PATCH /api/trip/{tripId}/complete`
-
-- 이미 COMPLETED 상태면 `400` 반환
-- 클라이언트는 여행 완료 성공 후 `POST /api/quiz/sessions`에 같은 `tripId`를 전달해 오늘의 퀴즈를 생성합니다.
-
----
-
-### Quiz API 상세
-
-여행 완료 후 클라이언트가 `tripId`를 전달하면, 서버는 해당 여행의 `visit_logs`를 기준으로 방문 유적지와 연결된 문제를 10개 구성합니다. 기존 `quiz` 문제가 부족하면 `QuizAiClient`가 GMS Claude API를 호출해 부족분을 생성하고, 생성된 문제와 객관식 선택지를 각각 `quiz`, `quiz_choices`에 저장합니다.
-
-**퀴즈 세션 생성** `POST /api/quiz/sessions`
-
-```json
-// Request
-{
-  "tripId": 1
-}
-```
-
-```json
-// Response
-{
-  "success": true,
-  "data": {
-    "tripId": 1,
-    "totalCount": 10,
-    "questions": [
-      {
-        "sessionId": 10,
-        "quizId": 100,
-        "heritageId": 1,
-        "heritageName": "서울 숭례문",
-        "title": "숭례문 복습",
-        "content": "다음 중 숭례문에 대한 설명으로 옳은 것은?",
-        "source": "AI_GENERATED",
-        "difficulty": "MEDIUM",
-        "sortOrder": 1,
-        "choices": [
-          { "choiceId": 1, "content": "조선 시대 도성의 남쪽 문이다." },
-          { "choiceId": 2, "content": "고려 시대 왕궁의 정문이다." }
-        ]
-      }
-    ]
-  }
-}
-```
-
-- 이미 생성된 세션이 있으면 새로 만들지 않고 기존 세션을 반환합니다.
-- 문제 후보는 방문 유적지별로 균형 있게 랜덤 선택합니다.
-- 응답에는 정답 여부와 해설을 포함하지 않습니다.
-- AI 호출은 DB 트랜잭션 밖에서 수행하고, `quiz`, `quiz_choices`, `quiz_sessions` 저장만 짧은 트랜잭션으로 처리합니다.
-
-**퀴즈 세션 조회** `GET /api/quiz/sessions?tripId={tripId}`
-
-- 이미 생성된 퀴즈 문제와 선택지를 다시 조회합니다.
-- 본인 소유의 여행이 아니면 `403` 반환.
-
-**퀴즈 답안 제출** `POST /api/quiz/results`
-
-```json
-// Request
-{
-  "answers": [
-    { "sessionId": 10, "choiceId": 1 },
-    { "sessionId": 11, "choiceId": 5 }
-  ]
-}
-```
-
-```json
-// Response
-{
-  "success": true,
-  "data": {
-    "tripId": 1,
-    "totalCount": 10,
-    "correctCount": 8,
-    "accuracy": 80,
-    "results": [
-      {
-        "sessionId": 10,
-        "quizId": 100,
-        "correct": true,
-        "selectedChoiceId": 1,
-        "correctChoiceId": 1,
-        "explanation": "숭례문은 조선 한양도성의 남대문입니다."
-      }
-    ]
-  }
-}
-```
-
-- `choiceId`가 해당 문제의 선택지인지 검증합니다.
-- 이미 제출된 세션은 중복 제출할 수 없습니다.
-- 채점 결과는 `quiz_results`에 저장하고, `quiz_sessions.status`를 `SUBMITTED`로 변경합니다.
-
-**퀴즈 결과 조회** `GET /api/quiz/results?tripId={tripId}`
-
-- 저장된 채점 결과를 답안 제출 응답과 같은 형식으로 반환합니다.
-- 본인 소유의 여행이 아니면 `403` 반환.
-- 제출된 결과가 없으면 `404` 반환.
-
----
-
-### 추천 API 상세
-
-**진행 중 추천** `GET /api/trip/{tripId}/recommend/next`
+**`GET /api/trip/{tripId}/recommend/next`**
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|---|---|
@@ -387,57 +237,27 @@ GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
 | `lng` | double | Y | 현재 경도 |
 | `radiusKm` | double | N | 탐색 반경 km (기본값: 5) |
 
-```json
-// Response
-{
-  "success": true,
-  "data": [
-    {
-      "heritageId": 42,
-      "name": "종묘",
-      "thumbnailUrl": null,
-      "lat": 37.5751,
-      "lng": 126.9946,
-      "distanceM": 1230
-    }
-  ]
-}
-```
-
-- 현재 방문 문화재 임베딩 평균 벡터로 KNN 검색 → 반경 내 미방문 문화재 최대 5개 반환
-- 임베딩 배치 적재 완료 후 사용 가능
+- 방문 기록 있을 때: 방문 문화재 임베딩 평균 → KNN 100개 → 반경 내 미방문 필터 → 거리순 5개
+- 방문 기록 없을 때: 좌표 기반 근거리 5개 반환 (폴백)
 
 ---
 
-### 리포트 API 상세
+### 퀴즈 API
 
-**여행 리포트** `GET /api/report/{tripId}`
+여행 완료 후 `tripId`를 전달하면 방문 유적지 기반 10문제를 구성합니다.
+기존 DB 문제가 부족하면 GMS Claude API로 부족분을 생성·저장합니다.
 
-```json
-// Response
-{
-  "success": true,
-  "data": {
-    "tripId": 1,
-    "visitedHeritages": [
-      { "heritageId": 1, "name": "창덕궁", "thumbnailUrl": "https://..." }
-    ],
-    "recommendedHeritages": [
-      {
-        "heritageId": 200,
-        "name": "불국사",
-        "thumbnailUrl": null,
-        "lat": 35.7896,
-        "lng": 129.3318,
-        "distanceM": 0
-      }
-    ],
-    "summary": "조선 시대 궁궐을 중심으로 탐방하셨네요..."
-  }
-}
-```
+**`POST /api/quiz/sessions`** → 이미 생성된 세션이 있으면 기존 세션 반환 (멱등)
 
-- 방문 문화재 기반 KNN → 다른 지역(시/도) 문화재 최대 5개 추천
+**`POST /api/quiz/results`** → 전체 답안 일괄 제출·채점, 중복 제출 불가
+
+---
+
+### 리포트 API
+
+**`GET /api/report/{tripId}`**
+
+- 방문 문화재 기반 KNN → 다른 지역 문화재 코스 추천
 - GPT-4o로 여행 요약 생성
 - 임베딩 배치 적재 완료 후 사용 가능
 
@@ -456,10 +276,10 @@ GMS_API_KEY=... DB_PASSWORD=1234 ./mvnw spring-boot:run
 | HTTP 상태 | 상황 |
 |---|---|
 | 200 | 정상 처리 |
-| 201 | 리소스 생성 완료 (여행 생성 등) |
-| 400 | 요청 오류 (문화재 식별 불가, 기본 해설 없음, 중복 여행, 권한 없음 등) |
-| 403 | 소유하지 않은 여행/퀴즈 접근 |
+| 201 | 리소스 생성 완료 |
+| 400 | 요청 오류 (문화재 식별 불가, 중복 여행 등) |
 | 401 | 인증 실패 (토큰 없음 또는 만료) |
-| 404 | 리소스 없음 (반경 내 문화재 없음, ID 미존재 등) |
+| 403 | 소유하지 않은 여행/퀴즈 접근 |
+| 404 | 리소스 없음 |
 | 502 | GMS AI API 호출 실패 |
 | 500 | 서버 내부 오류 |
